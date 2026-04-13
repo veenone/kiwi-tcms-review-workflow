@@ -1,0 +1,13 @@
+{% extends "base.html" %}
+{% load i18n static %}
+{% block contents %}
+<div class="container-cards-pf">
+  <div class="card-pf">
+    <div class="card-pf-body">
+      <form method="post">{% csrf_token %}{{ form.as_p }}
+        <button type="submit" class="btn btn-primary">{% trans "Save" %}</button>
+      </form>
+    </div>
+  </div>
+</div>
+{% endblock %}

@@ -1,0 +1,31 @@
+[project]
+name = "kiwitcms-review"
+version = "0.1.0"
+description = "Test case review workflow plugin for Kiwi TCMS — group cases into review requests, assign reviewers, collect votes, and notify by email"
+readme = "README.md"
+license = "GPL-2.0-or-later"
+requires-python = ">=3.9"
+dependencies = []
+authors = [{ name = "Achmad Fienan Rahardianto", email = "veenone@gmail.com" }]
+classifiers = [
+    "Framework :: Django",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: GNU General Public License v2 or later (GPLv2+)",
+    "Programming Language :: Python :: 3",
+    "Topic :: Software Development :: Quality Assurance",
+    "Topic :: Software Development :: Testing",
+]
+keywords = ["tcms", "kiwi", "plugin", "review", "workflow"]
+
+[project.entry-points."kiwitcms.plugins"]
+reviews = "tcms_review"
+
+[project.urls]
+Homepage = "https://github.com/veenone/kiwitcms-review"
+
+[build-system]
+requires = ["setuptools>=61"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+include = ["tcms_review*"]

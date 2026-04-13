@@ -1,0 +1,5 @@
+{% load i18n %}{% blocktrans with title=review_request.title pk=review_request.pk requester=review_request.requester.username %}You have been assigned as a reviewer on review request #{{ pk }}: {{ title }} (created by {{ requester }}).{% endblocktrans %}
+
+{% blocktrans with due=review_request.due_date %}Due: {{ due }}{% endblocktrans %}
+
+{{ review_request.description }}

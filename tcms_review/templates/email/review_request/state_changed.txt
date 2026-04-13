@@ -1,0 +1,3 @@
+{% load i18n %}{% blocktrans with pk=review_request.pk previous=previous_state current=review_request.get_state_display %}Review request #{{ pk }} transitioned from {{ previous }} to {{ current }}.{% endblocktrans %}
+
+{{ review_request.title }}

@@ -1,0 +1,18 @@
+{% extends "base.html" %}
+{% load i18n static %}
+
+{% block title %}{% trans "Review requests" %}{% endblock %}
+
+{% block contents %}
+<div class="container-cards-pf">
+  <div class="card-pf">
+    <div class="card-pf-heading">
+      <h2 class="card-pf-title">{% trans "Review requests" %}</h2>
+    </div>
+    <div class="card-pf-body">
+      {# TODO: list of ReviewRequest objects with status badges #}
+      <p class="text-muted">{% trans "List view — implementation pending." %}</p>
+    </div>
+  </div>
+</div>
+{% endblock %}
