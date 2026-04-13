@@ -1,6 +1,6 @@
 from django.apps import AppConfig
 from django.conf import settings
-from django.db.models.signals import post_save, pre_save
+from django.db.models.signals import m2m_changed, post_save, pre_save
 
 
 class ReviewConfig(AppConfig):
@@ -27,6 +27,11 @@ class ReviewConfig(AppConfig):
             review_signals.handle_emails_post_review_request_save,
             sender=ReviewRequest,
             dispatch_uid="tcms_review.email_post_request_save",
+        )
+        m2m_changed.connect(
+            review_signals.handle_reviewers_changed,
+            sender=ReviewRequest.reviewers.through,
+            dispatch_uid="tcms_review.email_reviewers_added",
         )
         post_save.connect(
             review_signals.handle_emails_post_review_vote_save,

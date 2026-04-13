@@ -1,5 +1,12 @@
-{% load i18n %}{% blocktrans with title=review_request.title pk=review_request.pk requester=review_request.requester.username %}You have been assigned as a reviewer on review request #{{ pk }}: {{ title }} (created by {{ requester }}).{% endblocktrans %}
+{% load i18n %}{% blocktrans with pk=review_request.pk title=review_request.title requester=review_request.requester.username %}You have been assigned as a reviewer on Review Request #{{ pk }}: {{ title }}
 
+Requested by: {{ requester }}{% endblocktrans %}
+{% if review_request.due_date %}
 {% blocktrans with due=review_request.due_date %}Due: {{ due }}{% endblocktrans %}
-
+{% endif %}
+{% if review_request.description %}
+----
 {{ review_request.description }}
+----
+{% endif %}
+{% blocktrans %}Open the request:{% endblocktrans %} {{ absolute_url }}

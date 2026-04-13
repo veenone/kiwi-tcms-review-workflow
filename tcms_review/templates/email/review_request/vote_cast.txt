@@ -1,3 +1,7 @@
-{% load i18n %}{% blocktrans with reviewer=vote.reviewer.username decision=vote.get_decision_display pk=vote.review_request.pk %}{{ reviewer }} voted "{{ decision }}" on review request #{{ pk }}.{% endblocktrans %}
-
-{% if vote.comment %}{{ vote.comment }}{% endif %}
+{% load i18n %}{% blocktrans with reviewer=vote.reviewer.username decision=vote.get_decision_display pk=vote.review_request.pk title=vote.review_request.title %}{{ reviewer }} voted "{{ decision }}" on Review Request #{{ pk }} ({{ title }}).{% endblocktrans %}
+{% if vote.comment %}
+----
+{{ vote.comment }}
+----
+{% endif %}
+{% blocktrans %}Open the request:{% endblocktrans %} {{ absolute_url }}
