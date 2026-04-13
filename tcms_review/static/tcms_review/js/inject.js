@@ -36,7 +36,24 @@
         return $btn;
     }
 
+    function wireConfirmForms() {
+        // Any <form data-confirm="..."> on a plugin page gets a native
+        // confirm dialog before submission. Bootbox would be nicer but
+        // pulling it in cross-page is fragile in a plugin context.
+        $('form[data-confirm]').on('submit', function (event) {
+            const message = $(this).data('confirm');
+            // eslint-disable-next-line no-alert
+            if (!window.confirm(message)) {
+                event.preventDefault();
+                return false;
+            }
+            return true;
+        });
+    }
+
     $(function () {
+        wireConfirmForms();
+
         const ctx = detectPageContext();
         if (!ctx || !ctx.pk) {
             return;

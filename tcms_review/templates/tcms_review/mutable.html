@@ -1,13 +1,97 @@
 {% extends "base.html" %}
 {% load i18n static %}
+
+{% block head %}
+    {{ form.media }}
+    <link rel="stylesheet" href="{% static 'tcms_review/css/review.css' %}">
+{% endblock %}
+
+{% block title %}
+    {% if object %}{% trans "Edit review request" %}{% else %}{% trans "New review request" %}{% endif %}
+{% endblock %}
+{% block page_id %}page-review-mutable{% endblock %}
+
 {% block contents %}
-<div class="container-cards-pf">
-  <div class="card-pf">
-    <div class="card-pf-body">
-      <form method="post">{% csrf_token %}{{ form.as_p }}
-        <button type="submit" class="btn btn-primary">{% trans "Save" %}</button>
-      </form>
+<div class="container-fluid container-cards-pf">
+
+    <ol class="breadcrumb">
+        <li><a href="{% url 'core-views-index' %}">{% trans "Dashboard" %}</a></li>
+        <li><a href="{% url 'review-list' %}">{% trans "Review requests" %}</a></li>
+        <li class="active">
+            {% if object %}{% blocktrans with pk=object.pk %}Edit #{{ pk }}{% endblocktrans %}{% else %}{% trans "New" %}{% endif %}
+        </li>
+    </ol>
+
+    <div class="card-pf">
+        <div class="card-pf-heading">
+            <h2 class="card-pf-title">
+                {% if object %}
+                    {% blocktrans with pk=object.pk %}Edit review request #{{ pk }}{% endblocktrans %}
+                {% else %}
+                    {% trans "New review request" %}
+                {% endif %}
+            </h2>
+        </div>
+        <div class="card-pf-body">
+
+            <form class="form-horizontal" method="post"
+                  action="{% if object %}{% url 'review-edit' object.pk %}{% else %}{% url 'review-new' %}{% endif %}{% if request.GET.testcase %}?testcase={{ request.GET.testcase }}{% endif %}">
+                {% csrf_token %}
+
+                {% if form.non_field_errors %}
+                <div class="alert alert-danger" role="alert">{{ form.non_field_errors }}</div>
+                {% endif %}
+
+                <div class="form-group {% if form.title.errors %}has-error{% endif %}">
+                    <label class="col-md-2 control-label" for="id_title">{% trans "Title" %}</label>
+                    <div class="col-md-10">
+                        <input type="text" id="id_title" name="title" required
+                               value="{{ form.title.value|default:'' }}"
+                               class="form-control"
+                               placeholder="{% trans 'A short summary describing what is being reviewed' %}">
+                        {% if form.title.help_text %}<p class="help-block">{{ form.title.help_text }}</p>{% endif %}
+                        {{ form.title.errors }}
+                    </div>
+                </div>
+
+                <div class="form-group {% if form.due_date.errors %}has-error{% endif %}">
+                    <label class="col-md-2 control-label" for="id_due_date">{% trans "Due date" %}</label>
+                    <div class="col-md-4">
+                        {{ form.due_date }}
+                        {% if form.due_date.help_text %}<p class="help-block">{{ form.due_date.help_text }}</p>{% endif %}
+                        {{ form.due_date.errors }}
+                    </div>
+                </div>
+
+                <div class="form-group {% if form.reviewers.errors %}has-error{% endif %}">
+                    <label class="col-md-2 control-label" for="id_reviewers">{% trans "Reviewers" %}</label>
+                    <div class="col-md-10">
+                        {{ form.reviewers }}
+                        {% if form.reviewers.help_text %}<p class="help-block">{{ form.reviewers.help_text }}</p>{% endif %}
+                        {{ form.reviewers.errors }}
+                    </div>
+                </div>
+
+                <div class="form-group {% if form.description.errors %}has-error{% endif %}">
+                    <label class="col-md-2 control-label" for="id_description">{% trans "Description" %}</label>
+                    <div class="col-md-10">
+                        {{ form.description }}
+                        {{ form.description.errors }}
+                    </div>
+                </div>
+
+                <div class="review-actions-bar">
+                    <div class="col-md-offset-2 col-md-10">
+                        <a href="{% if object %}{% url 'review-get' object.pk %}{% else %}{% url 'review-list' %}{% endif %}"
+                           class="btn btn-default btn-lg">{% trans "Cancel" %}</a>
+                        <button type="submit" class="btn btn-primary btn-lg">
+                            <i class="fa fa-save" aria-hidden="true"></i> {% trans "Save" %}
+                        </button>
+                    </div>
+                </div>
+            </form>
+
+        </div>
     </div>
-  </div>
 </div>
 {% endblock %}

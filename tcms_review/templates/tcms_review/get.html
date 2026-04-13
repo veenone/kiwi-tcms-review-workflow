@@ -1,96 +1,230 @@
 {% extends "base.html" %}
-{% load i18n static %}
+{% load i18n static review_extras %}
+
+{% block head %}
+    {{ vote_form.media }}
+    <link rel="stylesheet" href="{% static 'tcms_review/css/review.css' %}">
+{% endblock %}
 
 {% block title %}{% blocktrans with pk=review_request.pk title=review_request.title %}Review #{{ pk }}: {{ title }}{% endblocktrans %}{% endblock %}
+{% block page_id %}page-review-get{% endblock %}
 
 {% block contents %}
-<div class="container-cards-pf">
+<div class="container-fluid container-cards-pf"
+     data-review-pk="{{ review_request.pk }}">
 
-  <div class="card-pf">
-    <div class="card-pf-heading">
-      <h2 class="card-pf-title">
-        #{{ review_request.pk }} — {{ review_request.title }}
-        <span class="label label-info">{{ review_request.get_state_display }}</span>
-      </h2>
-      <p class="card-pf-subtitle">
-        {% blocktrans with requester=review_request.requester.username created=review_request.created_at|date:"Y-m-d" %}Requested by {{ requester }} on {{ created }}{% endblocktrans %}
-        {% if review_request.due_date %} · {% trans "Due" %}: {{ review_request.due_date|date:"Y-m-d" }}{% endif %}
-      </p>
-    </div>
-    <div class="card-pf-body">
-      <p>{{ review_request.description|linebreaksbr }}</p>
-    </div>
-  </div>
+    <ol class="breadcrumb">
+        <li><a href="{% url 'core-views-index' %}">{% trans "Dashboard" %}</a></li>
+        <li><a href="{% url 'review-list' %}">{% trans "Review requests" %}</a></li>
+        <li class="active">#{{ review_request.pk }}</li>
+    </ol>
 
-  <div class="card-pf">
-    <div class="card-pf-heading"><h3 class="card-pf-title">{% trans "Reviewers & votes" %}</h3></div>
-    <div class="card-pf-body">
-      <table class="table">
-        <thead><tr><th>{% trans "Reviewer" %}</th><th>{% trans "Decision" %}</th><th>{% trans "Comment" %}</th><th>{% trans "Voted at" %}</th></tr></thead>
-        <tbody>
-          {% for reviewer in review_request.reviewers.all %}
-          <tr>
-            <td>{{ reviewer.username }}</td>
-            {% with vote=votes|dictsort:"reviewer_id" %}{% endwith %}
-            {% with this_vote=None %}
-              {% for v in votes %}{% if v.reviewer_id == reviewer.pk %}
-                <td><span class="label label-default">{{ v.get_decision_display }}</span></td>
-                <td>{{ v.comment|default:"—" }}</td>
-                <td>{{ v.voted_at|date:"Y-m-d H:i" }}</td>
-              {% endif %}{% endfor %}
-              {% if not votes.exists %}
-                <td colspan="3" class="text-muted">{% trans "Pending" %}</td>
-              {% endif %}
-            {% endwith %}
-          </tr>
-          {% endfor %}
-        </tbody>
-      </table>
-    </div>
-  </div>
+    <div class="card-pf">
+        <div class="card-pf-heading">
+            <h2 class="card-pf-title">
+                <span aria-label="{% trans 'Review request number' %}">#{{ review_request.pk }}</span>
+                — {{ review_request.title }}
+                {% state_badge review_request.state review_request.get_state_display %}
+            </h2>
+            <p class="card-pf-subtitle">
+                {% blocktrans with requester=review_request.requester.username created=review_request.created_at|date:"Y-m-d" %}Requested by {{ requester }} on {{ created }}{% endblocktrans %}
+                {% if review_request.due_date %}
+                    · <i class="fa fa-clock-o" aria-hidden="true"></i> {% trans "Due" %}: {{ review_request.due_date|date:"Y-m-d H:i" }}
+                {% endif %}
+            </p>
+        </div>
 
-  <div class="card-pf">
-    <div class="card-pf-heading"><h3 class="card-pf-title">{% trans "Cases under review" %}</h3></div>
-    <div class="card-pf-body">
-      <table class="table">
-        <thead><tr><th>#</th><th>{% trans "Summary" %}</th><th>{% trans "Decision" %}</th><th>{% trans "Comment" %}</th></tr></thead>
-        <tbody>
-          {% for item in items %}
-          <tr>
-            <td>{{ item.case.pk }}</td>
-            <td>{{ item.case.summary }}</td>
-            <td>{{ item.get_decision_display }}</td>
-            <td>{{ item.comment|default:"—" }}</td>
-          </tr>
-          {% empty %}
-          <tr><td colspan="4" class="text-muted">{% trans "No cases attached." %}</td></tr>
-          {% endfor %}
-        </tbody>
-      </table>
-    </div>
-  </div>
+        <div class="card-pf-body">
+            <div class="review-aggregate" role="group" aria-label="{% trans 'Review metrics' %}">
+                <div class="aggregate-status-pf">
+                    <div class="aggregate-status-pf-title">{% trans "Reviewers" %}</div>
+                    <div class="aggregate-status-pf-count">{{ review_request.reviewers.count }}</div>
+                </div>
+                <div class="aggregate-status-pf">
+                    <div class="aggregate-status-pf-title">{% trans "Votes cast" %}</div>
+                    <div class="aggregate-status-pf-count">{{ metrics.votes.approved|add:metrics.votes.rejected|add:metrics.votes.needs_changes }}</div>
+                    <div class="aggregate-status-pf-notification">{{ metrics.participation|floatformat:0 }}% {% trans "participation" %}</div>
+                </div>
+                <div class="aggregate-status-pf">
+                    <div class="aggregate-status-pf-title">{% trans "Approvals" %}</div>
+                    <div class="aggregate-status-pf-count text-success">{{ metrics.votes.approved }}</div>
+                </div>
+                <div class="aggregate-status-pf">
+                    <div class="aggregate-status-pf-title">{% trans "Rejections" %}</div>
+                    <div class="aggregate-status-pf-count text-danger">{{ metrics.votes.rejected }}</div>
+                </div>
+                <div class="aggregate-status-pf">
+                    <div class="aggregate-status-pf-title">{% trans "Changes requested" %}</div>
+                    <div class="aggregate-status-pf-count text-warning">{{ metrics.votes.needs_changes }}</div>
+                </div>
+            </div>
 
-  {% if is_reviewer and review_request.state != "cancelled" %}
-  <div class="card-pf">
-    <div class="card-pf-heading"><h3 class="card-pf-title">{% trans "Cast your vote" %}</h3></div>
-    <div class="card-pf-body">
-      <form method="post" action="{% url 'review-vote' review_request.pk %}">{% csrf_token %}
-        {{ vote_form.as_p }}
-        <button type="submit" class="btn btn-primary">{% trans "Submit vote" %}</button>
-      </form>
+            {% if review_request.description %}
+                <p>{{ review_request.description|linebreaksbr }}</p>
+            {% endif %}
+        </div>
     </div>
-  </div>
-  {% endif %}
 
-  {% if is_owner and review_request.state != "cancelled" %}
-  <div class="card-pf">
-    <div class="card-pf-body">
-      <form method="post" action="{% url 'review-cancel' review_request.pk %}">{% csrf_token %}
-        <button type="submit" class="btn btn-danger">{% trans "Cancel review request" %}</button>
-      </form>
+    <div class="card-pf">
+        <div class="card-pf-heading"><h3 class="card-pf-title">{% trans "Reviewers & votes" %}</h3></div>
+        <div class="card-pf-body">
+            {% if review_request.reviewers.all %}
+            <div class="table-responsive">
+                <table class="table" aria-label="{% trans 'Reviewers and their votes' %}">
+                    <thead>
+                        <tr>
+                            <th>{% trans "Reviewer" %}</th>
+                            <th>{% trans "Decision" %}</th>
+                            <th>{% trans "Comment" %}</th>
+                            <th>{% trans "Voted at" %}</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for reviewer in review_request.reviewers.all %}
+                            {% with this_vote=votes|vote_for:reviewer %}
+                            <tr>
+                                <td>{{ reviewer.username }}</td>
+                                {% if this_vote %}
+                                    <td>{% decision_badge this_vote.decision this_vote.get_decision_display %}</td>
+                                    <td>{{ this_vote.comment|default:"—" }}</td>
+                                    <td>{{ this_vote.voted_at|date:"Y-m-d H:i" }}</td>
+                                {% else %}
+                                    <td><span class="label label-default">{% trans "Pending" %}</span></td>
+                                    <td colspan="2" class="text-muted">{% trans "Awaiting vote" %}</td>
+                                {% endif %}
+                            </tr>
+                            {% endwith %}
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+            {% else %}
+            <div class="review-blank-slate">
+                <i class="pficon pficon-user" aria-hidden="true"></i>
+                <h3>{% trans "No reviewers assigned" %}</h3>
+                <p>{% trans "Edit this request to add reviewers." %}</p>
+                {% if is_owner %}
+                <a class="btn btn-default" href="{% url 'review-edit' review_request.pk %}">
+                    <i class="fa fa-pencil" aria-hidden="true"></i> {% trans "Edit request" %}
+                </a>
+                {% endif %}
+            </div>
+            {% endif %}
+        </div>
     </div>
-  </div>
-  {% endif %}
+
+    <div class="card-pf">
+        <div class="card-pf-heading"><h3 class="card-pf-title">{% trans "Cases under review" %}</h3></div>
+        <div class="card-pf-body">
+            {% if items %}
+            <div class="table-responsive">
+                <table class="table review-cases-table" aria-label="{% trans 'Cases under review' %}">
+                    <thead>
+                        <tr>
+                            <th style="width: 70px;">#</th>
+                            <th>{% trans "Summary" %}</th>
+                            <th style="width: 160px;">{% trans "Decision" %}</th>
+                            <th style="width: 280px;">{% trans "Actions" %}</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for item in items %}
+                        <tr data-item-pk="{{ item.pk }}">
+                            <td>{{ item.case.pk }}</td>
+                            <td>{{ item.case.summary }}</td>
+                            <td>{% decision_badge item.decision item.get_decision_display %}</td>
+                            <td class="review-item-actions">
+                                <form method="post" action="{% url 'review-item-decision' item.pk %}" class="form-inline">
+                                    {% csrf_token %}
+                                    <button name="decision" value="approved" class="btn btn-xs btn-success"
+                                            aria-label="{% trans 'Approve case' %}">
+                                        <i class="pficon pficon-ok" aria-hidden="true"></i>
+                                    </button>
+                                    <button name="decision" value="needs_changes" class="btn btn-xs btn-warning"
+                                            aria-label="{% trans 'Request changes on case' %}">
+                                        <i class="pficon pficon-warning-triangle-o" aria-hidden="true"></i>
+                                    </button>
+                                    <button name="decision" value="rejected" class="btn btn-xs btn-danger"
+                                            aria-label="{% trans 'Reject case' %}">
+                                        <i class="pficon pficon-error-circle-o" aria-hidden="true"></i>
+                                    </button>
+                                </form>
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+            {% else %}
+            <div class="review-blank-slate">
+                <i class="fa fa-list-alt" aria-hidden="true"></i>
+                <h3>{% trans "No cases attached" %}</h3>
+                <p>{% trans "Open a TestCase and click 'Send for review' to add it here." %}</p>
+            </div>
+            {% endif %}
+        </div>
+    </div>
+
+    {% if is_reviewer and review_request.state != "cancelled" %}
+    <div class="card-pf">
+        <div class="card-pf-heading"><h3 class="card-pf-title">{% trans "Cast your vote" %}</h3></div>
+        <div class="card-pf-body">
+            <form method="post" action="{% url 'review-vote' review_request.pk %}" class="form-horizontal">
+                {% csrf_token %}
+
+                <div class="form-group {% if vote_form.decision.errors %}has-error{% endif %}">
+                    <label class="col-md-2 control-label">{% trans "Your decision" %}</label>
+                    <div class="col-md-10">
+                        <label class="review-vote-radio">
+                            <input type="radio" name="decision" value="approved" required>
+                            <i class="pficon pficon-ok text-success" aria-hidden="true"></i> {% trans "Approve" %}
+                        </label>
+                        <label class="review-vote-radio">
+                            <input type="radio" name="decision" value="needs_changes">
+                            <i class="pficon pficon-warning-triangle-o text-warning" aria-hidden="true"></i> {% trans "Request changes" %}
+                        </label>
+                        <label class="review-vote-radio">
+                            <input type="radio" name="decision" value="rejected">
+                            <i class="pficon pficon-error-circle-o text-danger" aria-hidden="true"></i> {% trans "Reject" %}
+                        </label>
+                        {{ vote_form.decision.errors }}
+                    </div>
+                </div>
+
+                <div class="form-group {% if vote_form.comment.errors %}has-error{% endif %}">
+                    <label class="col-md-2 control-label" for="id_comment">{% trans "Comment" %}</label>
+                    <div class="col-md-10">
+                        {{ vote_form.comment }}
+                        <p class="help-block">{% trans "Optional. Markdown supported." %}</p>
+                        {{ vote_form.comment.errors }}
+                    </div>
+                </div>
+
+                <div class="form-group">
+                    <div class="col-md-offset-2 col-md-10">
+                        <button type="submit" class="btn btn-primary">
+                            <i class="fa fa-paper-plane" aria-hidden="true"></i> {% trans "Submit vote" %}
+                        </button>
+                    </div>
+                </div>
+            </form>
+        </div>
+    </div>
+    {% endif %}
+
+    {% if is_owner and review_request.state != "cancelled" %}
+    <div class="card-pf">
+        <div class="card-pf-body">
+            <form method="post" action="{% url 'review-cancel' review_request.pk %}"
+                  data-confirm="{% trans 'Cancel this review request? This cannot be undone.' %}">
+                {% csrf_token %}
+                <button type="submit" class="btn btn-danger">
+                    <i class="fa fa-ban" aria-hidden="true"></i> {% trans "Cancel review request" %}
+                </button>
+            </form>
+        </div>
+    </div>
+    {% endif %}
 
 </div>
 {% endblock %}

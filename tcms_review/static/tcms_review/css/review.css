@@ -1,0 +1,111 @@
+/* kiwitcms-review plugin styles. Lives alongside Kiwi's PatternFly stylesheet. */
+
+.review-aggregate {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 12px;
+    margin-bottom: 16px;
+}
+
+.review-aggregate .aggregate-status-pf {
+    flex: 1 1 160px;
+    min-width: 140px;
+    border: 1px solid #ededed;
+    border-radius: 3px;
+    padding: 12px 16px;
+    background: #fff;
+}
+
+.review-aggregate .aggregate-status-pf-title {
+    font-size: 13px;
+    color: #72767b;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    margin-bottom: 4px;
+}
+
+.review-aggregate .aggregate-status-pf-count {
+    font-size: 24px;
+    font-weight: 300;
+    color: #292e34;
+    line-height: 1.1;
+}
+
+.review-aggregate .aggregate-status-pf-notification {
+    font-size: 12px;
+    color: #9c9c9c;
+}
+
+.review-blank-slate {
+    text-align: center;
+    padding: 36px 12px;
+    color: #72767b;
+}
+
+.review-blank-slate .pficon,
+.review-blank-slate .fa {
+    font-size: 48px;
+    color: #bbbbbb;
+    margin-bottom: 12px;
+}
+
+.review-blank-slate h3 {
+    margin-top: 0;
+    margin-bottom: 8px;
+    font-weight: 400;
+    color: #292e34;
+}
+
+.review-blank-slate p {
+    margin: 0 0 16px;
+}
+
+.review-actions-bar {
+    position: sticky;
+    bottom: 0;
+    background: #fff;
+    border-top: 1px solid #ededed;
+    padding: 12px 0;
+    margin-top: 24px;
+    z-index: 5;
+}
+
+.review-actions-bar .btn + .btn {
+    margin-left: 8px;
+}
+
+.review-vote-radio {
+    display: inline-flex;
+    align-items: center;
+    margin-right: 16px;
+    cursor: pointer;
+}
+
+.review-vote-radio input[type="radio"] {
+    margin-right: 6px;
+}
+
+.review-vote-radio .pficon,
+.review-vote-radio .fa {
+    margin-right: 4px;
+}
+
+.review-cases-table .review-item-actions .btn {
+    margin-right: 4px;
+}
+
+.review-cases-table .review-item-actions .btn + .btn {
+    margin-left: 0;
+}
+
+.label[role="status"] {
+    font-size: 12px;
+    padding: 4px 8px;
+    line-height: 1.4;
+}
+
+@media (max-width: 767px) {
+    .review-aggregate .aggregate-status-pf {
+        flex-basis: 100%;
+    }
+}
