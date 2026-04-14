@@ -1,6 +1,6 @@
 from django.contrib.auth.decorators import login_required, permission_required
 from django.core.exceptions import PermissionDenied
-from django.http import HttpResponseRedirect
+from django.http import HttpResponseRedirect, JsonResponse
 from django.shortcuts import get_object_or_404
 from django.urls import reverse, reverse_lazy
 from django.utils.decorators import method_decorator
@@ -17,6 +17,8 @@ from tcms_review import reports
 from tcms_review.forms import NewReviewRequestForm, VoteForm
 from tcms_review.models import ReviewItem, ReviewRequest, ReviewVote
 from tcms_review.state_machine import State
+
+_PENDING_LIMIT = 10
 
 
 @method_decorator(login_required, name="dispatch")
@@ -160,3 +162,65 @@ class Report(DetailView):
         ctx = super().get_context_data(**kwargs)
         ctx["metrics"] = reports.metrics(self.object)
         return ctx
+
+
+# ─── JSON endpoints consumed by the JS injection bundle ──────────────
+
+
+@method_decorator(login_required, name="dispatch")
+@method_decorator(permission_required("tcms_review.view_reviewrequest"), name="dispatch")
+class PendingMineJSON(View):
+    """Dashboard widget data source: requests assigned to the current user
+    that are still open and haven't received their vote yet."""
+
+    def get(self, request):
+        qs = (
+            ReviewRequest.objects
+            .filter(reviewers=request.user, state=State.IN_REVIEW)
+            .exclude(votes__reviewer=request.user)
+            .select_related("requester")
+            .order_by("due_date")[:_PENDING_LIMIT]
+        )
+        payload = [
+            {
+                "id": r.pk,
+                "title": r.title,
+                "url": reverse("review-get", args=[r.pk]),
+                "requester": r.requester.username,
+                "due_date": r.due_date.isoformat() if r.due_date else None,
+            }
+            for r in qs
+        ]
+        return JsonResponse({"results": payload})
+
+
+@method_decorator(login_required, name="dispatch")
+@method_decorator(permission_required("tcms_review.view_reviewrequest"), name="dispatch")
+class CaseLatestJSON(View):
+    """Per-case badge data source: latest ReviewItem for a given TestCase."""
+
+    def get(self, request, case_pk):
+        item = (
+            ReviewItem.objects
+            .filter(case_id=case_pk)
+            .select_related("review_request")
+            .order_by("-updated_at")
+            .first()
+        )
+        if item is None:
+            return JsonResponse({"item": None})
+        r = item.review_request
+        return JsonResponse({
+            "item": {
+                "id": item.pk,
+                "decision": item.decision,
+                "decision_display": item.get_decision_display(),
+                "review_request": {
+                    "id": r.pk,
+                    "title": r.title,
+                    "state": r.state,
+                    "state_display": r.get_state_display(),
+                    "url": reverse("review-get", args=[r.pk]),
+                },
+            },
+        })
