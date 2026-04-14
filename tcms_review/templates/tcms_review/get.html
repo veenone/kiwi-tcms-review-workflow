@@ -31,6 +31,9 @@
                 {% if review_request.due_date %}
                     · <i class="fa fa-clock-o" aria-hidden="true"></i> {% trans "Due" %}: {{ review_request.due_date|date:"Y-m-d H:i" }}
                 {% endif %}
+                · <a href="{% url 'review-report' review_request.pk %}" class="small">
+                    <i class="fa fa-bar-chart" aria-hidden="true"></i> {% trans "View report" %}
+                </a>
             </p>
         </div>
 

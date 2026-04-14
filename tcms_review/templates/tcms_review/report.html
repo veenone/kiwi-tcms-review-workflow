@@ -1,14 +1,125 @@
 {% extends "base.html" %}
-{% load i18n static %}
+{% load i18n static review_extras %}
+
+{% block head %}
+    <link rel="stylesheet" href="{% static 'tcms_review/css/review.css' %}">
+{% endblock %}
+
+{% block title %}{% blocktrans with pk=review_request.pk %}Report — Review #{{ pk }}{% endblocktrans %}{% endblock %}
+{% block page_id %}page-review-report{% endblock %}
+
 {% block contents %}
-<div class="container-cards-pf">
-  <div class="card-pf">
-    <div class="card-pf-heading">
-      <h2 class="card-pf-title">{% blocktrans with pk=object.pk %}Report — Review #{{ pk }}{% endblocktrans %}</h2>
+<div class="container-fluid container-cards-pf">
+
+    <ol class="breadcrumb">
+        <li><a href="{% url 'core-views-index' %}">{% trans "Dashboard" %}</a></li>
+        <li><a href="{% url 'review-list' %}">{% trans "Review requests" %}</a></li>
+        <li><a href="{% url 'review-get' review_request.pk %}">#{{ review_request.pk }}</a></li>
+        <li class="active">{% trans "Report" %}</li>
+    </ol>
+
+    <div class="card-pf">
+        <div class="card-pf-heading">
+            <h2 class="card-pf-title">
+                {% blocktrans with pk=review_request.pk title=review_request.title %}Report — Review #{{ pk }}: {{ title }}{% endblocktrans %}
+                {% state_badge review_request.state review_request.get_state_display %}
+            </h2>
+            <p class="card-pf-subtitle">
+                {% blocktrans with requester=review_request.requester.username created=review_request.created_at|date:"Y-m-d H:i" %}Requested by {{ requester }} on {{ created }}{% endblocktrans %}
+            </p>
+        </div>
+
+        <div class="card-pf-body">
+            <div class="review-aggregate" role="group" aria-label="{% trans 'Review metrics' %}">
+                <div class="aggregate-status-pf">
+                    <div class="aggregate-status-pf-title">{% trans "Reviewers" %}</div>
+                    <div class="aggregate-status-pf-count">{{ review_request.reviewers.count }}</div>
+                </div>
+                <div class="aggregate-status-pf">
+                    <div class="aggregate-status-pf-title">{% trans "Participation" %}</div>
+                    <div class="aggregate-status-pf-count">{% widthratio metrics.participation 1 100 %}%</div>
+                </div>
+                <div class="aggregate-status-pf">
+                    <div class="aggregate-status-pf-title">{% trans "Approvals" %}</div>
+                    <div class="aggregate-status-pf-count text-success">{{ metrics.votes.approved }}</div>
+                </div>
+                <div class="aggregate-status-pf">
+                    <div class="aggregate-status-pf-title">{% trans "Rejections" %}</div>
+                    <div class="aggregate-status-pf-count text-danger">{{ metrics.votes.rejected }}</div>
+                </div>
+                <div class="aggregate-status-pf">
+                    <div class="aggregate-status-pf-title">{% trans "Changes requested" %}</div>
+                    <div class="aggregate-status-pf-count text-warning">{{ metrics.votes.needs_changes }}</div>
+                </div>
+                {% if metrics.time_to_decision %}
+                <div class="aggregate-status-pf">
+                    <div class="aggregate-status-pf-title">{% trans "Time to decision" %}</div>
+                    <div class="aggregate-status-pf-count">{{ metrics.time_to_decision }}</div>
+                </div>
+                {% endif %}
+            </div>
+        </div>
     </div>
-    <div class="card-pf-body">
-      <p class="text-muted">{% trans "Reporting view — implementation pending." %}</p>
+
+    <div class="card-pf">
+        <div class="card-pf-heading">
+            <h3 class="card-pf-title">{% trans "Per-case decisions" %}</h3>
+        </div>
+        <div class="card-pf-body">
+            {% if metrics.items %}
+            <div class="table-responsive">
+                <table class="table" aria-label="{% trans 'Per-case decision counts' %}">
+                    <thead><tr><th>{% trans "Decision" %}</th><th>{% trans "Count" %}</th></tr></thead>
+                    <tbody>
+                        {% for decision, count in metrics.items.items %}
+                        <tr>
+                            <td>{% decision_badge decision %}</td>
+                            <td>{{ count }}</td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+            {% else %}
+            <p class="text-muted">{% trans "No cases attached to this request." %}</p>
+            {% endif %}
+        </div>
     </div>
-  </div>
+
+    <div class="card-pf">
+        <div class="card-pf-heading">
+            <h3 class="card-pf-title">{% trans "Reviewer participation" %}</h3>
+        </div>
+        <div class="card-pf-body">
+            <div class="table-responsive">
+                <table class="table" aria-label="{% trans 'Reviewer participation' %}">
+                    <thead>
+                        <tr>
+                            <th>{% trans "Reviewer" %}</th>
+                            <th>{% trans "Decision" %}</th>
+                            <th>{% trans "Voted at" %}</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for reviewer in review_request.reviewers.all %}
+                            {% with vote=review_request.votes.all|vote_for:reviewer %}
+                            <tr>
+                                <td>{{ reviewer.username }}</td>
+                                {% if vote %}
+                                    <td>{% decision_badge vote.decision vote.get_decision_display %}</td>
+                                    <td>{{ vote.voted_at|date:"Y-m-d H:i" }}</td>
+                                {% else %}
+                                    <td><span class="label label-default">{% trans "Pending" %}</span></td>
+                                    <td class="text-muted">—</td>
+                                {% endif %}
+                            </tr>
+                            {% endwith %}
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
 </div>
 {% endblock %}
