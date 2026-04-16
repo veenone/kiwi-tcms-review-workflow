@@ -15,6 +15,16 @@ class ReviewConfig(AppConfig):
         if rpc_module not in settings.MODERNRPC_METHODS_MODULES:
             settings.MODERNRPC_METHODS_MODULES.append(rpc_module)
 
+        # Register the response-rewriting middleware that injects the
+        # plugin's JS bundle into every HTML response so the "Send for
+        # review" button / per-case badge / dashboard widget all work on
+        # Kiwi core pages without editing any core template. ready() runs
+        # before Django's BaseHandler lazy-loads the middleware chain, so
+        # appending here is safe.
+        middleware_path = "tcms_review.middleware.InjectReviewBundleMiddleware"
+        if middleware_path not in settings.MIDDLEWARE:
+            settings.MIDDLEWARE = list(settings.MIDDLEWARE) + [middleware_path]
+
         from tcms_review import signals as review_signals
         from tcms_review.models import ReviewRequest, ReviewVote
 
