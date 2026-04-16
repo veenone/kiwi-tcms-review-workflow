@@ -128,9 +128,20 @@ def filter_canonical(query=None):
 @permissions_required("tcms_review.change_reviewrequest")
 @rpc_method(name="ReviewRequest.add_case")
 def add_case(request_id, case_id):
+    from tcms.testcases.models import TestCase  # noqa: WPS433
+    from tcms_review.conf import get_allowed_case_statuses  # noqa: WPS433
+
+    case = TestCase.objects.select_related("case_status").get(pk=case_id)
+    allowed = get_allowed_case_statuses()
+    if case.case_status.name.upper() not in [s.upper() for s in allowed]:
+        raise ValueError(
+            f"TestCase status '{case.case_status.name}' is not allowed for "
+            f"review. Allowed statuses: {', '.join(allowed)}"
+        )
+
     review_request = ReviewRequest.objects.get(pk=request_id)
     item, _ = ReviewItem.objects.get_or_create(
-        review_request=review_request, case_id=case_id,
+        review_request=review_request, case_id=case.pk,
     )
     return _serialize_item(item)
 

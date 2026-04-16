@@ -14,6 +14,7 @@ from django.views.generic import (
 )
 
 from tcms_review import reports
+from tcms_review.conf import get_allowed_case_statuses
 from tcms_review.forms import NewReviewRequestForm, VoteForm
 from tcms_review.models import ReviewItem, ReviewRequest, ReviewVote
 from tcms_review.state_machine import State
@@ -56,13 +57,28 @@ class New(CreateView):
     def form_valid(self, form):
         form.instance.requester = self.request.user
         response = super().form_valid(form)
+
         case_pk = self.request.GET.get("testcase")
         if case_pk:
-            ReviewItem.objects.get_or_create(
-                review_request=self.object,
-                case_id=case_pk,
-            )
+            self._attach_case(case_pk)
         return response
+
+    def _attach_case(self, case_pk):
+        from tcms.testcases.models import TestCase  # noqa: WPS433
+
+        try:
+            case = TestCase.objects.select_related("case_status").get(pk=case_pk)
+        except TestCase.DoesNotExist:
+            return
+
+        allowed = get_allowed_case_statuses()
+        if case.case_status.name.upper() not in [s.upper() for s in allowed]:
+            return
+
+        ReviewItem.objects.get_or_create(
+            review_request=self.object,
+            case_id=case.pk,
+        )
 
 
 @method_decorator(login_required, name="dispatch")
@@ -224,3 +240,63 @@ class CaseLatestJSON(View):
                 },
             },
         })
+
+
+@method_decorator(login_required, name="dispatch")
+@method_decorator(permission_required("tcms_review.view_reviewrequest"), name="dispatch")
+class AllowedStatusesJSON(View):
+    """Expose the configured allowed case statuses so the JS 'add case'
+    form can warn users when a case's status doesn't qualify."""
+
+    def get(self, request):
+        return JsonResponse({"allowed": get_allowed_case_statuses()})
+
+
+# ─── Statistics dashboard ──────────────────────────────────────────────
+
+
+@method_decorator(login_required, name="dispatch")
+@method_decorator(permission_required("tcms_review.view_reviewrequest"), name="dispatch")
+class Stats(TemplateView):
+    """Aggregate review statistics across all requests."""
+
+    template_name = "tcms_review/stats.html"
+
+    def get_context_data(self, **kwargs):
+        ctx = super().get_context_data(**kwargs)
+
+        qs = ReviewRequest.objects.all()
+        ctx["total_requests"] = qs.count()
+        ctx["by_state"] = {}
+        for value, label in State.CHOICES:
+            count = qs.filter(state=value).count()
+            ctx["by_state"][label] = count
+
+        ctx["total_votes"] = ReviewVote.objects.count()
+        ctx["total_items"] = ReviewItem.objects.count()
+
+        from django.db.models import Avg, Count, F  # noqa: WPS433
+
+        terminal_qs = qs.filter(state__in=list(State.TERMINAL))
+        avg_duration = terminal_qs.aggregate(
+            avg=Avg(F("updated_at") - F("created_at"))
+        )["avg"]
+        ctx["avg_time_to_decision"] = avg_duration
+
+        top_reviewers = (
+            ReviewVote.objects
+            .values("reviewer__username")
+            .annotate(vote_count=Count("pk"))
+            .order_by("-vote_count")[:10]
+        )
+        ctx["top_reviewers"] = list(top_reviewers)
+
+        top_requesters = (
+            ReviewRequest.objects
+            .values("requester__username")
+            .annotate(request_count=Count("pk"))
+            .order_by("-request_count")[:10]
+        )
+        ctx["top_requesters"] = list(top_requesters)
+
+        return ctx

@@ -12,7 +12,9 @@ urlpatterns = [
     re_path(r"^(?P<pk>\d+)/report/$", views.Report.as_view(), name="review-report"),
     re_path(r"^item/(?P<pk>\d+)/decision/$", views.ItemDecision.as_view(), name="review-item-decision"),
     re_path(r"^search/$", views.Search.as_view(), name="review-search"),
-    # JSON endpoints consumed by inject.js (dashboard widget, per-case badge)
+    re_path(r"^stats/$", views.Stats.as_view(), name="review-stats"),
+    # JSON endpoints consumed by inject.js (dashboard widget, per-case badge, config)
     re_path(r"^json/pending-mine/$", views.PendingMineJSON.as_view(), name="review-json-pending-mine"),
     re_path(r"^json/case/(?P<case_pk>\d+)/latest/$", views.CaseLatestJSON.as_view(), name="review-json-case-latest"),
+    re_path(r"^json/allowed-statuses/$", views.AllowedStatusesJSON.as_view(), name="review-json-allowed-statuses"),
 ]

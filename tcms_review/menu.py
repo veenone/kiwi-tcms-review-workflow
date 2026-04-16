@@ -5,5 +5,6 @@ MENU_ITEMS = [
     ("Review Requests", [
         ("All review requests", reverse_lazy("review-list")),
         ("New review request", reverse_lazy("review-new")),
+        ("Review statistics", reverse_lazy("review-stats")),
     ]),
 ]

@@ -10,15 +10,56 @@
 
     var PLUGIN_ROOT = '/reviews';
 
-    // ─── Page detection ────────────────────────────────────────────────
+    // ─── Helpers ──────────────────────────────────────────────────────
+
+    function getCsrfToken() {
+        // CSRF_COOKIE_HTTPONLY = True in Kiwi, so the cookie is unreadable.
+        // Every authenticated page has a {% csrf_token %} hidden input in
+        // the logout form (navbar.html). Read it from there.
+        var $input = $('input[name=csrfmiddlewaretoken]').first();
+        return $input.length ? $input.val() : '';
+    }
+
+    function jsonRPC(method, params, callback) {
+        if (!Array.isArray(params)) { params = [params]; }
+        $.ajax({
+            url: '/json-rpc/',
+            data: JSON.stringify({
+                jsonrpc: '2.0',
+                method: method,
+                params: params,
+                id: 'tcms_review'
+            }),
+            type: 'POST',
+            dataType: 'json',
+            contentType: 'application/json',
+            success: function (result) {
+                if (result.error) {
+                    // eslint-disable-next-line no-alert
+                    alert(result.error.message);
+                } else if (callback) {
+                    callback(result.result);
+                }
+            },
+            error: function (err, status, thrown) {
+                console.log('*** tcms_review jsonRPC error:', err, status, thrown);
+            }
+        });
+    }
+
+    // ─── Page detection ───────────────────────────────────────────────
 
     function detectPageContext() {
         var pageId = (document.body && document.body.id) || '';
-        if (pageId === 'page-testcases-get' || pageId === 'testcases-get') {
-            return { kind: 'testcase', pk: pkFromUrl(/\/case\/(\d+)/) };
+
+        if (pageId === 'page-testcases-get') {
+            var $span = $('#test_case_pk');
+            return { kind: 'testcase', pk: $span.data('pk') || null };
         }
-        if (pageId === 'page-testplans-get' || pageId === 'testplans-get') {
-            return { kind: 'testplan', pk: pkFromUrl(/\/plan\/(\d+)/) };
+        if (pageId === 'page-testplans-get') {
+            var $container = $('[data-testplan-pk]');
+            var pk = $container.data('testplan-pk') || pkFromUrl(/\/plan\/(\d+)/);
+            return { kind: 'testplan', pk: pk };
         }
         if (pageId === 'page-dashboard' || pageId === 'core-views-index') {
             return { kind: 'dashboard' };
@@ -45,58 +86,166 @@
         });
     }
 
-    // ─── Send-for-review modal ────────────────────────────────────────
+    // ─── User typeahead picker ────────────────────────────────────────
 
-    function getCsrfToken() {
-        var match = document.cookie.match(/csrftoken=([^;]+)/);
-        return match ? match[1] : '';
+    function buildUserPicker(inputId, hiddenId) {
+        var $wrapper = $('<div class="review-user-picker"/>');
+
+        var $input = $('<input type="text" class="form-control" autocomplete="off"/>')
+            .attr('id', inputId)
+            .attr('placeholder', 'Type username or email to search...');
+        var $hidden = $('<input type="hidden"/>')
+            .attr('id', hiddenId)
+            .attr('name', 'reviewers');
+        var $tags = $('<div class="review-user-tags" style="margin-top:6px;"/>');
+        var $results = $('<ul class="dropdown-menu review-user-results" style="display:none; position:absolute; z-index:1060;"/>');
+
+        var selectedUsers = {};
+
+        function renderTags() {
+            $tags.empty();
+            $.each(selectedUsers, function (pk, username) {
+                var $tag = $('<span class="label label-info" style="margin-right:4px; cursor:pointer;"/>')
+                    .text(username + ' ✕')
+                    .attr('title', 'Click to remove')
+                    .on('click', function () {
+                        delete selectedUsers[pk];
+                        renderTags();
+                    });
+                $tags.append($tag);
+            });
+            var ids = Object.keys(selectedUsers);
+            $hidden.val(ids.join(','));
+        }
+
+        var searchTimer;
+        $input.on('input', function () {
+            clearTimeout(searchTimer);
+            var query = $.trim($input.val());
+            if (query.length < 2) {
+                $results.hide();
+                return;
+            }
+            searchTimer = setTimeout(function () {
+                jsonRPC('User.filter', { username__icontains: query }, function (data) {
+                    $results.empty();
+                    if (!data || !data.length) {
+                        $results.hide();
+                        return;
+                    }
+                    $.each(data, function (i, user) {
+                        if (selectedUsers[user.id]) { return; }
+                        var $li = $('<li><a href="#"></a></li>');
+                        $li.find('a').text(user.username + ' (' + user.email + ')');
+                        $li.on('click', function (e) {
+                            e.preventDefault();
+                            selectedUsers[user.id] = user.username;
+                            renderTags();
+                            $input.val('');
+                            $results.hide();
+                        });
+                        $results.append($li);
+                    });
+                    $results.show();
+                });
+            }, 300);
+        });
+
+        $(document).on('click', function (e) {
+            if (!$(e.target).closest('.review-user-picker').length) {
+                $results.hide();
+            }
+        });
+
+        $wrapper.append($input).append($results).append($hidden).append($tags);
+        return $wrapper;
     }
 
+    // ─── Send-for-review modal ────────────────────────────────────────
+
     function buildModal(ctx) {
-        var html = ''
-            + '<div class="modal fade" id="review-send-modal" tabindex="-1" role="dialog" aria-labelledby="review-send-modal-title">'
-            + '  <div class="modal-dialog" role="document">'
-            + '    <div class="modal-content">'
-            + '      <form method="post" action="' + PLUGIN_ROOT + '/new/?' + ctx.kind + '=' + ctx.pk + '">'
-            + '        <div class="modal-header">'
-            + '          <button type="button" class="close" data-dismiss="modal" aria-label="Close"><span aria-hidden="true">&times;</span></button>'
-            + '          <h4 class="modal-title" id="review-send-modal-title">Send for review</h4>'
-            + '        </div>'
-            + '        <div class="modal-body">'
-            + '          <input type="hidden" name="csrfmiddlewaretoken" value="' + getCsrfToken() + '">'
-            + '          <div class="form-group">'
-            + '            <label for="review-send-title">Title</label>'
-            + '            <input type="text" name="title" id="review-send-title" class="form-control" required>'
-            + '          </div>'
-            + '          <div class="form-group">'
-            + '            <label for="review-send-due">Due date (optional)</label>'
-            + '            <input type="text" name="due_date" id="review-send-due" class="form-control date-picker" placeholder="YYYY-MM-DD HH:MM">'
-            + '          </div>'
-            + '          <div class="form-group">'
-            + '            <label for="review-send-reviewers">Reviewer user IDs (comma-separated)</label>'
-            + '            <input type="text" name="reviewers" id="review-send-reviewers" class="form-control" required placeholder="12, 34, 56">'
-            + '            <p class="help-block">Temporary simple input — phase 3 will replace with a typeahead picker.</p>'
-            + '          </div>'
-            + '          <div class="form-group">'
-            + '            <label for="review-send-description">Description (optional)</label>'
-            + '            <textarea name="description" id="review-send-description" class="form-control" rows="4"></textarea>'
-            + '          </div>'
-            + '        </div>'
-            + '        <div class="modal-footer">'
-            + '          <button type="button" class="btn btn-default" data-dismiss="modal">Cancel</button>'
-            + '          <button type="submit" class="btn btn-primary">Open review request</button>'
-            + '        </div>'
-            + '      </form>'
-            + '    </div>'
-            + '  </div>'
-            + '</div>';
-        return $(html);
+        var $modal = $('<div class="modal fade" id="review-send-modal" tabindex="-1" role="dialog"/>');
+        var $dialog = $('<div class="modal-dialog" role="document"/>');
+        var $content = $('<div class="modal-content"/>');
+
+        var formAction = PLUGIN_ROOT + '/new/?' + ctx.kind + '=' + ctx.pk;
+
+        var $form = $('<form method="post"/>')
+            .attr('action', formAction);
+        $form.append('<input type="hidden" name="csrfmiddlewaretoken" value="' + getCsrfToken() + '">');
+
+        // Header
+        $form.append(
+            '<div class="modal-header">' +
+            '  <button type="button" class="close" data-dismiss="modal" aria-label="Close"><span aria-hidden="true">&times;</span></button>' +
+            '  <h4 class="modal-title">Send for review</h4>' +
+            '</div>'
+        );
+
+        // Body
+        var $body = $('<div class="modal-body"/>');
+
+        $body.append(
+            '<div class="form-group">' +
+            '  <label for="review-send-title">Title</label>' +
+            '  <input type="text" name="title" id="review-send-title" class="form-control" required>' +
+            '</div>'
+        );
+
+        // Due date with datetimepicker
+        $body.append(
+            '<div class="form-group">' +
+            '  <label for="review-send-due">Due date (optional)</label>' +
+            '  <input type="text" name="due_date" id="review-send-due" class="form-control" autocomplete="off">' +
+            '</div>'
+        );
+
+        // Reviewers — user typeahead picker
+        var $reviewerGroup = $('<div class="form-group"/>');
+        $reviewerGroup.append('<label>Reviewers</label>');
+        $reviewerGroup.append(buildUserPicker('review-send-reviewer-search', 'review-send-reviewers'));
+        $body.append($reviewerGroup);
+
+        // Description
+        $body.append(
+            '<div class="form-group">' +
+            '  <label for="review-send-description">Description (optional)</label>' +
+            '  <textarea name="description" id="review-send-description" class="form-control" rows="3"></textarea>' +
+            '</div>'
+        );
+
+        $form.append($body);
+
+        // Footer
+        $form.append(
+            '<div class="modal-footer">' +
+            '  <button type="button" class="btn btn-default" data-dismiss="modal">Cancel</button>' +
+            '  <button type="submit" class="btn btn-primary">Create review request</button>' +
+            '</div>'
+        );
+
+        $content.append($form);
+        $dialog.append($content);
+        $modal.append($dialog);
+
+        // Initialize datetimepicker after DOM insertion
+        $modal.on('shown.bs.modal', function () {
+            if ($.fn.datetimepicker) {
+                $('#review-send-due').datetimepicker({
+                    format: 'YYYY-MM-DD HH:mm',
+                    allowInputToggle: true,
+                    showTodayButton: true,
+                    locale: $('html').attr('lang') || 'en',
+                    icons: { today: 'today-button-pf' }
+                });
+            }
+        });
+
+        return $modal;
     }
 
     function buildSendButton(ctx) {
         var $btn = $('<button type="button" class="btn btn-default review-send-btn"/>')
-            .attr('data-review-context', ctx.kind)
-            .attr('data-review-pk', ctx.pk)
             .html('<i class="fa fa-paper-plane" aria-hidden="true"></i> Send for review');
         $btn.on('click', function () {
             var $modal = $('#review-send-modal');
@@ -111,12 +260,33 @@
 
     function injectSendButton(ctx) {
         if (!ctx.pk) { return; }
-        var $actions = $('.page-header .actions, .card-pf-heading .actions').first();
-        if ($actions.length === 0) {
-            $actions = $('.card-pf-heading').first();
+
+        if (ctx.kind === 'testcase') {
+            // TestCase detail: inject after the <h1> heading
+            var $h1 = $('h1.col-md-12').first();
+            if ($h1.length) {
+                var $btnWrap = $('<div class="col-md-12" style="margin-bottom:12px;"/>');
+                $btnWrap.append(buildSendButton(ctx));
+                $h1.after($btnWrap);
+                return;
+            }
         }
-        if ($actions.length) {
-            $actions.append(' ').append(buildSendButton(ctx));
+
+        if (ctx.kind === 'testplan') {
+            // TestPlan detail: inject into the toolbar actions area
+            var $toolbar = $('.toolbar-pf-actions').first();
+            if ($toolbar.length) {
+                var $group = $('<div class="form-group" style="margin-left:8px; display:inline-block;"/>');
+                $group.append(buildSendButton(ctx));
+                $toolbar.append($group);
+                return;
+            }
+        }
+
+        // Fallback
+        var $heading = $('.card-pf-heading').first();
+        if ($heading.length) {
+            $heading.append(' ').append(buildSendButton(ctx));
         }
     }
 
@@ -143,7 +313,7 @@
                     .attr('href', item.review_request.url)
                     .attr('title', 'Review request #' + item.review_request.id)
                     .text(item.decision_display);
-                var $target = $('.page-header h1, .card-pf-heading .card-pf-title').first();
+                var $target = $('h1.col-md-12').first();
                 if ($target.length) {
                     $target.append(' ').append($badge);
                 }
@@ -198,10 +368,79 @@
             });
     }
 
+    // ─── Review detail page: add test case ────────────────────────────
+
+    function wireAddCaseForm() {
+        var $form = $('#review-add-case-form');
+        if (!$form.length) { return; }
+
+        var $input = $form.find('#review-add-case-input');
+        var $results = $form.find('.review-add-case-results');
+        var reviewPk = $form.data('review-pk');
+
+        var searchTimer;
+        $input.on('input', function () {
+            clearTimeout(searchTimer);
+            var query = $.trim($input.val());
+            if (query.length < 2) { $results.hide(); return; }
+            searchTimer = setTimeout(function () {
+                var rpcQuery = {};
+                if (!isNaN(query)) {
+                    rpcQuery = { pk: parseInt(query, 10) };
+                } else {
+                    rpcQuery = { summary__icontains: query };
+                }
+                jsonRPC('TestCase.filter', rpcQuery, function (data) {
+                    $results.empty();
+                    if (!data || !data.length) {
+                        $results.append('<li class="text-muted" style="padding:6px 12px;">No cases found</li>');
+                        $results.show();
+                        return;
+                    }
+                    $.each(data.slice(0, 20), function (i, tc) {
+                        var $li = $('<li><a href="#"></a></li>');
+                        $li.find('a').text('TC-' + tc.id + ': ' + tc.summary);
+                        $li.on('click', function (e) {
+                            e.preventDefault();
+                            $results.hide();
+                            $input.val('');
+                            jsonRPC('ReviewRequest.add_case', [reviewPk, tc.id], function () {
+                                window.location.reload();
+                            });
+                        });
+                        $results.append($li);
+                    });
+                    $results.show();
+                });
+            }, 300);
+        });
+
+        $(document).on('click', function (e) {
+            if (!$(e.target).closest('#review-add-case-form').length) {
+                $results.hide();
+            }
+        });
+    }
+
+    // ─── Datepicker init for server-rendered forms ─────────────────────
+
+    function initDatePickers() {
+        if (!$.fn.datetimepicker) { return; }
+        $('#id_due_date').datetimepicker({
+            format: 'YYYY-MM-DD HH:mm',
+            allowInputToggle: true,
+            showTodayButton: true,
+            locale: $('html').attr('lang') || 'en',
+            icons: { today: 'today-button-pf' }
+        });
+    }
+
     // ─── Init ─────────────────────────────────────────────────────────
 
     $(function () {
         wireConfirmForms();
+        wireAddCaseForm();
+        initDatePickers();
 
         var ctx = detectPageContext();
         if (!ctx) { return; }
