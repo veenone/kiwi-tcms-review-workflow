@@ -2,7 +2,7 @@
 {% load i18n static review_extras %}
 
 {% block head %}
-    <link rel="stylesheet" href="{% static 'tcms_review/css/review.css' %}">
+    <link rel="stylesheet" href="{% review_static 'tcms_review/css/review.css' %}">
 {% endblock %}
 
 {% block title %}{% blocktrans with pk=review_request.pk %}Report — Review #{{ pk }}{% endblocktrans %}{% endblock %}
@@ -120,6 +120,20 @@
             </div>
         </div>
     </div>
+
+    {# Threaded activity history with per-change comment diffs #}
+    {% if activity %}
+    <div class="card-pf">
+        <div class="card-pf-heading">
+            <h3 class="card-pf-title">
+                <i class="fa fa-history" aria-hidden="true"></i> {% trans "Activity history" %}
+            </h3>
+        </div>
+        <div class="card-pf-body">
+            {% include "tcms_review/_activity.html" %}
+        </div>
+    </div>
+    {% endif %}
 
 </div>
 {% endblock %}

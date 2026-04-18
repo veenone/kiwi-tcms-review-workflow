@@ -2,11 +2,11 @@
 {% load i18n static review_extras %}
 
 {% block head %}
-    <link rel="stylesheet" href="{% static 'tcms_review/css/review.css' %}">
-    <link rel="stylesheet" href="{% static 'tcms_review/vendor/c3.min.css' %}">
-    <script src="{% static 'tcms_review/vendor/d3.min.js' %}"></script>
-    <script src="{% static 'tcms_review/vendor/c3.min.js' %}"></script>
-    <script src="{% static 'tcms_review/js/charts.js' %}" defer></script>
+    <link rel="stylesheet" href="{% review_static 'tcms_review/css/review.css' %}">
+    <link rel="stylesheet" href="{% review_static 'tcms_review/vendor/c3.min.css' %}">
+    <script src="{% review_static 'tcms_review/vendor/d3.min.js' %}"></script>
+    <script src="{% review_static 'tcms_review/vendor/c3.min.js' %}"></script>
+    <script src="{% review_static 'tcms_review/js/charts.js' %}" defer></script>
 {% endblock %}
 
 {% block title %}{% trans "Review statistics" %}{% endblock %}

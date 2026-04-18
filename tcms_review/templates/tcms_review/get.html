@@ -3,7 +3,7 @@
 
 {% block head %}
     {{ vote_form.media }}
-    <link rel="stylesheet" href="{% static 'tcms_review/css/review.css' %}">
+    <link rel="stylesheet" href="{% review_static 'tcms_review/css/review.css' %}">
 {% endblock %}
 
 {% block title %}{% blocktrans with pk=review_request.pk title=review_request.title %}Review #{{ pk }}: {{ title }}{% endblocktrans %}{% endblock %}
@@ -335,7 +335,7 @@
     </div>
     {% endif %}
 
-    {# Audit trail / activity feed — derived from django-simple-history #}
+    {# Threaded audit trail — derived from django-simple-history #}
     {% if activity %}
     <div class="card-pf">
         <div class="card-pf-heading">
@@ -344,20 +344,7 @@
             </h3>
         </div>
         <div class="card-pf-body">
-            <ul class="review-activity-feed list-unstyled">
-                {% for entry in activity %}
-                <li class="review-activity-entry review-activity-{{ entry.kind }}">
-                    <div class="review-activity-meta">
-                        <span class="review-activity-timestamp">{{ entry.timestamp|date:"Y-m-d H:i" }}</span>
-                        <span class="review-activity-user">{% if entry.user %}{{ entry.user.username }}{% else %}{% trans "system" %}{% endif %}</span>
-                    </div>
-                    <div class="review-activity-body">
-                        <strong>{{ entry.label }}</strong>
-                        <span class="text-muted">· {{ entry.detail }}</span>
-                    </div>
-                </li>
-                {% endfor %}
-            </ul>
+            {% include "tcms_review/_activity.html" %}
         </div>
     </div>
     {% endif %}

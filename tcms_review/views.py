@@ -187,48 +187,124 @@ class ItemDecision(View):
 
 
 def _build_activity_feed(review_request):
-    """Derive a unified audit trail from the three HistoricalRecords managers.
+    """Derive a threaded audit trail from the three HistoricalRecords managers.
 
-    Each entry is {timestamp, user, kind, label, change}. Sorted newest first.
-    No new table required — django-simple-history is already tracking
-    everything we need.
+    Returns a list of threads, each thread is:
+        {kind: 'request'|'item'|'vote', title: str, entries: [entry, ...]}
+    Entries within a thread are ordered oldest-first (natural reading order).
+    Threads are ordered by the oldest entry's timestamp so the request
+    thread sits at the top and conversational threads (per-case, per-vote)
+    appear in the order they were opened.
+
+    Each entry captures:
+        {timestamp, user, label, detail, comment_before, comment_after, state_before, state_after}
+
+    No new model or migration required — django-simple-history is already
+    tracking everything we need on the three plugin models.
     """
-    entries = []
+    threads = []
 
-    for h in review_request.history.all():
-        entries.append({
-            "timestamp": h.history_date,
-            "user": h.history_user,
+    # Request thread — top-level
+    request_entries = []
+    prev = None
+    for h in review_request.history.order_by("history_date"):
+        entry = _make_entry(
+            h, kind="request",
+            label=_history_label(h),
+            detail=f"{h.title}",
+            prev=prev,
+            compare_fields=["state", "title", "description", "due_date"],
+        )
+        request_entries.append(entry)
+        prev = h
+    if request_entries:
+        threads.append({
             "kind": "request",
-            "label": _history_label(h),
-            "change": h.history_change_reason or "",
-            "detail": f"#{review_request.pk} {h.title}",
+            "title": f"Review request #{review_request.pk}",
+            "icon": "fa fa-flag",
+            "entries": request_entries,
+            "opened_at": request_entries[0]["timestamp"],
         })
 
-    for item in review_request.items.all():
-        for h in item.history.all():
-            entries.append({
-                "timestamp": h.history_date,
-                "user": h.history_user,
+    # One thread per ReviewItem
+    for item in review_request.items.select_related("case").all():
+        item_entries = []
+        prev = None
+        for h in item.history.order_by("history_date"):
+            entry = _make_entry(
+                h, kind="item",
+                label=_history_label(h, for_decision=True),
+                detail=h.get_decision_display(),
+                prev=prev,
+                compare_fields=["decision", "comment"],
+            )
+            item_entries.append(entry)
+            prev = h
+        if item_entries:
+            threads.append({
                 "kind": "item",
-                "label": _history_label(h, for_decision=True),
-                "change": h.history_change_reason or "",
-                "detail": f"Case #{h.case_id} → {h.get_decision_display()}",
+                "title": f"Case #{item.case_id}: {item.case.summary}",
+                "icon": "fa fa-file-text-o",
+                "entries": item_entries,
+                "opened_at": item_entries[0]["timestamp"],
             })
 
-    for vote in review_request.votes.all():
-        for h in vote.history.all():
-            entries.append({
-                "timestamp": h.history_date,
-                "user": h.history_user or h.reviewer,
+    # One thread per reviewer (their ReviewVote history)
+    for vote in review_request.votes.select_related("reviewer").all():
+        vote_entries = []
+        prev = None
+        for h in vote.history.order_by("history_date"):
+            entry = _make_entry(
+                h, kind="vote",
+                label=_history_label(h, for_vote=True),
+                detail=h.get_decision_display(),
+                prev=prev,
+                compare_fields=["decision", "comment"],
+            )
+            vote_entries.append(entry)
+            prev = h
+        if vote_entries:
+            threads.append({
                 "kind": "vote",
-                "label": _history_label(h, for_vote=True),
-                "change": h.history_change_reason or "",
-                "detail": f"{h.reviewer.username}: {h.get_decision_display()}",
+                "title": f"Vote by {vote.reviewer.username}",
+                "icon": "fa fa-gavel",
+                "entries": vote_entries,
+                "opened_at": vote_entries[0]["timestamp"],
             })
 
-    entries.sort(key=lambda e: e["timestamp"], reverse=True)
-    return entries
+    threads.sort(key=lambda t: t["opened_at"])
+    return threads
+
+
+def _make_entry(hist_record, kind, label, detail, prev, compare_fields):
+    """Assemble a single activity entry with a diff against the prior record."""
+    changes = []
+    if prev is not None:
+        for field in compare_fields:
+            old = getattr(prev, field, None)
+            new = getattr(hist_record, field, None)
+            if old != new:
+                changes.append({
+                    "field": field,
+                    "before": _format_field_value(old),
+                    "after": _format_field_value(new),
+                })
+
+    return {
+        "timestamp": hist_record.history_date,
+        "user": hist_record.history_user,
+        "kind": kind,
+        "label": label,
+        "detail": detail,
+        "changes": changes,
+        "history_type": hist_record.history_type,
+    }
+
+
+def _format_field_value(value):
+    if value is None:
+        return "—"
+    return str(value)
 
 
 def _history_label(hist_record, for_decision=False, for_vote=False):
@@ -266,6 +342,7 @@ class Report(DetailView):
     def get_context_data(self, **kwargs):
         ctx = super().get_context_data(**kwargs)
         ctx["metrics"] = reports.metrics(self.object)
+        ctx["activity"] = _build_activity_feed(self.object)
         return ctx
 
 

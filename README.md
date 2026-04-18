@@ -138,12 +138,22 @@ All settings are optional.
 | Setting | Default | Purpose |
 |---|---|---|
 | `REVIEW_ALLOWED_CASE_STATUSES` | `["PROPOSED"]` | List of `TestCaseStatus.name` values that can be submitted for review. Both the HTML views and the RPC `ReviewRequest.add_case` method enforce this list. |
+| `REVIEW_STATUS_TRANSITIONS` | `{}` | Auto-transition map for `TestCase.case_status` when a per-case review decision is set. Keys are `(source_status_name, decision)` tuples (decision: `approved` / `rejected` / `needs_changes`); values are target status names. |
 
 Example in `tcms_settings_dir/review.py` or your own `local_settings.py`:
 
 ```python
 REVIEW_ALLOWED_CASE_STATUSES = ["PROPOSED", "CONFIRMED"]
+
+REVIEW_STATUS_TRANSITIONS = {
+    ("PROPOSED", "approved"):       "CONFIRMED",
+    ("PROPOSED", "needs_changes"):  "NEED_UPDATE",
+    ("PROPOSED", "rejected"):       "DISABLED",
+    ("CONFIRMED", "needs_changes"): "NEED_UPDATE",
+}
 ```
+
+With this config, clicking "Needs changes" on any `PROPOSED` or `CONFIRMED` case flips its status to `NEED_UPDATE` automatically. The transition is captured in the audit trail via `django-simple-history`.
 
 ---
 

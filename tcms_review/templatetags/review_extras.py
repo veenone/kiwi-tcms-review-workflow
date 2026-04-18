@@ -1,10 +1,26 @@
 from django import template
+from django.templatetags.static import static
 from django.utils.safestring import mark_safe
 from django.utils.translation import gettext_lazy as _
 
+from tcms_review import __version__
 from tcms_review.state_machine import State, VoteDecision
 
 register = template.Library()
+
+
+@register.simple_tag
+def review_static(path):
+    """Like {% static %} but with the plugin version appended as a cache-buster.
+
+    Usage:
+        {% load review_extras %}
+        <link rel="stylesheet" href="{% review_static 'tcms_review/css/review.css' %}">
+
+    Browsers will re-fetch the asset on every plugin version bump without
+    the operator needing to configure ManifestStaticFilesStorage.
+    """
+    return f"{static(path)}?v={__version__}"
 
 
 _STATE_LABEL_CLASS = {

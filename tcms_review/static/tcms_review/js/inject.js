@@ -35,11 +35,143 @@
         return $modal;
     }
 
-    function showError(message, title) {
+    // Map raw backend error messages to a user-friendly {title, body, hint}
+    // tuple. Patterns are matched in order; the first match wins. Falls
+    // through to a generic "Something went wrong" for unknown messages.
+    var ERROR_PATTERNS = [
+        {
+            match: /TestCase status '([^']+)' is not allowed for review\. Allowed statuses: (.+)/,
+            build: function (m) {
+                return {
+                    title: "That test case can't be sent for review yet",
+                    body: "Test cases can only be sent for review while their status is: " + m[2] + ". This case is currently '" + m[1] + "'.",
+                    hint: "Change the case status to one of the allowed values first, or ask an admin to extend REVIEW_ALLOWED_CASE_STATUSES."
+                };
+            }
+        },
+        {
+            match: /Only the requester can cancel/i,
+            build: function () {
+                return {
+                    title: "Only the requester can cancel this review",
+                    body: "The review request can only be cancelled by the person who created it.",
+                    hint: "Ask the requester to cancel, or contact an admin."
+                };
+            }
+        },
+        {
+            match: /Only assigned reviewers can vote/i,
+            build: function () {
+                return {
+                    title: "You are not a reviewer on this request",
+                    body: "Voting is restricted to the reviewers listed on the request.",
+                    hint: "Ask the requester to add you to the reviewers list."
+                };
+            }
+        },
+        {
+            match: /Cannot vote on a cancelled review request/i,
+            build: function () {
+                return {
+                    title: "This review request has been cancelled",
+                    body: "Votes cannot be cast on a cancelled review request.",
+                    hint: ""
+                };
+            }
+        },
+        {
+            match: /approved and can no longer be modified/i,
+            build: function () {
+                return {
+                    title: "This review is approved and locked",
+                    body: "Once a review reaches the Approved state, its cases, reviewers, votes and decisions cannot be changed.",
+                    hint: "Create a new review request to track follow-up work."
+                };
+            }
+        },
+        {
+            match: /approved and can no longer be voted on/i,
+            build: function () {
+                return {
+                    title: "This review is already approved",
+                    body: "Further votes cannot be cast on an approved review.",
+                    hint: ""
+                };
+            }
+        },
+        {
+            match: /All cases must have a decision recorded/i,
+            build: function () {
+                return {
+                    title: "Decide on every case first",
+                    body: "Before you can cast your vote, each case listed under this review must have its decision set to Approve, Needs changes, or Reject.",
+                    hint: "Use the inline buttons in the 'Cases under review' table."
+                };
+            }
+        },
+        {
+            match: /Invalid decision: (.+)/,
+            build: function (m) {
+                return {
+                    title: "Invalid decision value",
+                    body: "'" + m[1] + "' isn't a recognised decision. Valid decisions are Pending, Approved, Rejected, and Needs changes.",
+                    hint: ""
+                };
+            }
+        },
+        {
+            match: /Approved review requests cannot be cancelled/i,
+            build: function () {
+                return {
+                    title: "Approved reviews cannot be cancelled",
+                    body: "Once a review is approved it becomes immutable — including its cancel action.",
+                    hint: ""
+                };
+            }
+        }
+    ];
+
+    function humaniseError(raw) {
+        if (!raw) {
+            return {
+                title: "Something went wrong",
+                body: "The server did not return an error message.",
+                hint: ""
+            };
+        }
+        // Strip JSON-RPC's verbose prefix
+        var msg = String(raw).replace(/^Internal error:\s*/i, '').trim();
+
+        for (var i = 0; i < ERROR_PATTERNS.length; i++) {
+            var p = ERROR_PATTERNS[i];
+            var m = msg.match(p.match);
+            if (m) { return p.build(m); }
+        }
+
+        return {
+            title: "That action didn't work",
+            body: msg,
+            hint: ""
+        };
+    }
+
+    function showError(rawMessage, title) {
         var $modal = ensureErrorModal();
-        $modal.find('.review-error-body').text(message || 'An unexpected error occurred.');
+        var $body = $modal.find('.modal-body');
+        var $title = $modal.find('.modal-title');
+
         if (title) {
-            $modal.find('.modal-title').html('<i class="pficon pficon-error-circle-o"></i> ' + title);
+            // Explicit title override (used for generic errors)
+            $title.html('<i class="pficon pficon-error-circle-o"></i> ' + title);
+            $body.empty().append($('<p class="review-error-body"/>').text(rawMessage || ''));
+        } else {
+            var parsed = humaniseError(rawMessage);
+            $title.html('<i class="pficon pficon-error-circle-o"></i> ' + parsed.title);
+            $body.empty();
+            $body.append($('<p class="review-error-body"/>').text(parsed.body));
+            if (parsed.hint) {
+                $body.append($('<p class="review-error-hint text-muted"/>').text(parsed.hint));
+            }
         }
         $modal.modal('show');
     }
@@ -104,7 +236,8 @@
             contentType: 'application/json',
             success: function (result) {
                 if (result.error) {
-                    showError(result.error.message || 'RPC error', 'Request failed');
+                    // Let showError humanise the raw message; no explicit title.
+                    showError(result.error.message || 'RPC error');
                 } else if (callback) {
                     callback(result.result);
                 }
@@ -112,9 +245,9 @@
             error: function (err, status, thrown) {
                 console.log('*** tcms_review jsonRPC error:', err, status, thrown);
                 showError(
-                    'The server rejected the request (' + status + '). ' +
-                    'Open the browser console for details.',
-                    'Request failed'
+                    'The server could not be reached (' + status + '). ' +
+                    'Check your connection and try again.',
+                    'Something went wrong'
                 );
             }
         });
