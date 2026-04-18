@@ -131,6 +131,10 @@ def add_case(request_id, case_id):
     from tcms.testcases.models import TestCase  # noqa: WPS433
     from tcms_review.conf import get_allowed_case_statuses  # noqa: WPS433
 
+    review_request = ReviewRequest.objects.get(pk=request_id)
+    if review_request.is_locked:
+        raise PermissionDenied("This review request is approved and can no longer be modified.")
+
     case = TestCase.objects.select_related("case_status").get(pk=case_id)
     allowed = get_allowed_case_statuses()
     if case.case_status.name.upper() not in [s.upper() for s in allowed]:
@@ -139,7 +143,6 @@ def add_case(request_id, case_id):
             f"review. Allowed statuses: {', '.join(allowed)}"
         )
 
-    review_request = ReviewRequest.objects.get(pk=request_id)
     item, _ = ReviewItem.objects.get_or_create(
         review_request=review_request, case_id=case.pk,
     )
@@ -175,9 +178,11 @@ def remove_reviewer(request_id, user_id):
 @permissions_required("tcms_review.change_reviewrequest")
 @rpc_method(name="ReviewRequest.cancel")
 def cancel(request_id, **kwargs):
-    """Only the requester can cancel."""
+    """Only the requester can cancel. Approved requests are locked."""
     review_request = ReviewRequest.objects.get(pk=request_id)
     request_user = kwargs.get(REQUEST_KEY).user
+    if review_request.is_locked:
+        raise PermissionDenied("Approved review requests cannot be cancelled.")
     if review_request.requester_id != request_user.pk:
         raise PermissionDenied("Only the requester can cancel a review request.")
     if review_request.state != State.CANCELLED:
@@ -203,10 +208,16 @@ def cast_vote(request_id, decision, comment="", **kwargs):
     review_request = ReviewRequest.objects.get(pk=request_id)
     request_user = kwargs.get(REQUEST_KEY).user
 
+    if review_request.is_locked:
+        raise PermissionDenied("This review request is approved and can no longer be voted on.")
     if not review_request.reviewers.filter(pk=request_user.pk).exists():
         raise PermissionDenied("Only assigned reviewers can vote on this request.")
     if review_request.state == State.CANCELLED:
         raise PermissionDenied("Cannot vote on a cancelled review request.")
+    if review_request.has_pending_items:
+        raise PermissionDenied(
+            "All cases must have a decision recorded before you can cast your vote."
+        )
 
     form = VoteForm(data={"decision": decision, "comment": comment})
     if not form.is_valid():
@@ -243,7 +254,9 @@ def set_item_decision(item_id, decision, comment=""):
     valid = {choice for choice, _ in ReviewItem.DECISION_CHOICES}
     if decision not in valid:
         raise ValueError(f"Invalid decision: {decision}")
-    item = ReviewItem.objects.get(pk=item_id)
+    item = ReviewItem.objects.select_related("review_request").get(pk=item_id)
+    if item.review_request.is_locked:
+        raise PermissionDenied("This review request is approved and can no longer be modified.")
     item.decision = decision
     item.comment = comment
     item.save(update_fields=["decision", "comment", "updated_at"])

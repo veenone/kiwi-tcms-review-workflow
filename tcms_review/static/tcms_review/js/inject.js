@@ -10,6 +10,75 @@
 
     var PLUGIN_ROOT = '/reviews';
 
+    // ─── Error + confirm modals (replace browser alerts) ──────────────
+
+    function ensureErrorModal() {
+        var $modal = $('#review-error-modal');
+        if ($modal.length) { return $modal; }
+        $modal = $(
+            '<div class="modal fade" id="review-error-modal" tabindex="-1" role="dialog" aria-labelledby="review-error-title">' +
+            '  <div class="modal-dialog" role="document">' +
+            '    <div class="modal-content">' +
+            '      <div class="modal-header">' +
+            '        <button type="button" class="close" data-dismiss="modal" aria-label="Close"><span aria-hidden="true">&times;</span></button>' +
+            '        <h4 class="modal-title" id="review-error-title"><i class="pficon pficon-error-circle-o"></i> Error</h4>' +
+            '      </div>' +
+            '      <div class="modal-body"><p class="review-error-body"></p></div>' +
+            '      <div class="modal-footer">' +
+            '        <button type="button" class="btn btn-default" data-dismiss="modal">Close</button>' +
+            '      </div>' +
+            '    </div>' +
+            '  </div>' +
+            '</div>'
+        );
+        $('body').append($modal);
+        return $modal;
+    }
+
+    function showError(message, title) {
+        var $modal = ensureErrorModal();
+        $modal.find('.review-error-body').text(message || 'An unexpected error occurred.');
+        if (title) {
+            $modal.find('.modal-title').html('<i class="pficon pficon-error-circle-o"></i> ' + title);
+        }
+        $modal.modal('show');
+    }
+
+    function ensureConfirmModal() {
+        var $modal = $('#review-confirm-modal');
+        if ($modal.length) { return $modal; }
+        $modal = $(
+            '<div class="modal fade" id="review-confirm-modal" tabindex="-1" role="dialog" aria-labelledby="review-confirm-title">' +
+            '  <div class="modal-dialog" role="document">' +
+            '    <div class="modal-content">' +
+            '      <div class="modal-header">' +
+            '        <button type="button" class="close" data-dismiss="modal" aria-label="Close"><span aria-hidden="true">&times;</span></button>' +
+            '        <h4 class="modal-title" id="review-confirm-title"><i class="pficon pficon-warning-triangle-o"></i> Confirm</h4>' +
+            '      </div>' +
+            '      <div class="modal-body"><p class="review-confirm-body"></p></div>' +
+            '      <div class="modal-footer">' +
+            '        <button type="button" class="btn btn-default" data-dismiss="modal">Cancel</button>' +
+            '        <button type="button" class="btn btn-danger review-confirm-ok">Confirm</button>' +
+            '      </div>' +
+            '    </div>' +
+            '  </div>' +
+            '</div>'
+        );
+        $('body').append($modal);
+        return $modal;
+    }
+
+    function showConfirm(message, onConfirm) {
+        var $modal = ensureConfirmModal();
+        $modal.find('.review-confirm-body').text(message);
+        var $ok = $modal.find('.review-confirm-ok');
+        $ok.off('click.review').on('click.review', function () {
+            $modal.modal('hide');
+            if (typeof onConfirm === 'function') { onConfirm(); }
+        });
+        $modal.modal('show');
+    }
+
     // ─── Helpers ──────────────────────────────────────────────────────
 
     function getCsrfToken() {
@@ -35,14 +104,18 @@
             contentType: 'application/json',
             success: function (result) {
                 if (result.error) {
-                    // eslint-disable-next-line no-alert
-                    alert(result.error.message);
+                    showError(result.error.message || 'RPC error', 'Request failed');
                 } else if (callback) {
                     callback(result.result);
                 }
             },
             error: function (err, status, thrown) {
                 console.log('*** tcms_review jsonRPC error:', err, status, thrown);
+                showError(
+                    'The server rejected the request (' + status + '). ' +
+                    'Open the browser console for details.',
+                    'Request failed'
+                );
             }
         });
     }
@@ -78,13 +151,15 @@
 
     function wireConfirmForms() {
         $('form[data-confirm]').on('submit', function (event) {
-            var message = $(this).data('confirm');
-            // eslint-disable-next-line no-alert
-            if (!window.confirm(message)) {
-                event.preventDefault();
-                return false;
-            }
-            return true;
+            var form = this;
+            if ($(form).data('confirmed')) { return true; }
+            event.preventDefault();
+            var message = $(form).data('confirm');
+            showConfirm(message, function () {
+                $(form).data('confirmed', true);
+                form.submit();
+            });
+            return false;
         });
     }
 

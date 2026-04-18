@@ -19,6 +19,14 @@
         <li class="active">#{{ review_request.pk }}</li>
     </ol>
 
+    {% if is_locked %}
+    <div class="alert alert-success" role="alert" style="margin-bottom:16px;">
+        <i class="pficon pficon-ok" aria-hidden="true"></i>
+        <strong>{% trans "Approved and locked." %}</strong>
+        {% trans "This review request has been approved and can no longer be modified." %}
+    </div>
+    {% endif %}
+
     <div class="card-pf">
         <div class="card-pf-heading">
             <h2 class="card-pf-title">
@@ -119,7 +127,7 @@
     <div class="card-pf">
         <div class="card-pf-heading"><h3 class="card-pf-title">{% trans "Cases under review" %}</h3></div>
         <div class="card-pf-body">
-            {% if review_request.state != "cancelled" %}
+            {% if review_request.state != "cancelled" and not is_locked %}
             <div id="review-add-case-form" data-review-pk="{{ review_request.pk }}"
                  style="margin-bottom:16px;">
 
@@ -220,6 +228,9 @@
                             <td>{{ item.case.summary }}</td>
                             <td>{% decision_badge item.decision item.get_decision_display %}</td>
                             <td class="review-item-actions">
+                                {% if is_locked %}
+                                <span class="text-muted">{% trans "Locked" %}</span>
+                                {% else %}
                                 <form method="post" action="{% url 'review-item-decision' item.pk %}" class="form-inline">
                                     {% csrf_token %}
                                     <button name="decision" value="approved" class="btn btn-xs btn-success"
@@ -235,6 +246,7 @@
                                         <i class="pficon pficon-error-circle-o" aria-hidden="true"></i>
                                     </button>
                                 </form>
+                                {% endif %}
                             </td>
                         </tr>
                         {% endfor %}
@@ -251,10 +263,19 @@
         </div>
     </div>
 
-    {% if is_reviewer and review_request.state != "cancelled" %}
+    {% if is_reviewer and review_request.state != "cancelled" and not is_locked %}
     <div class="card-pf">
         <div class="card-pf-heading"><h3 class="card-pf-title">{% trans "Cast your vote" %}</h3></div>
         <div class="card-pf-body">
+
+            {% if has_pending_items %}
+            <div class="alert alert-warning" role="alert">
+                <i class="pficon pficon-warning-triangle-o" aria-hidden="true"></i>
+                <strong>{% trans "Voting is blocked." %}</strong>
+                {% trans "All cases under review must have a decision recorded before you can cast your vote." %}
+            </div>
+            {% else %}
+
             <form method="post" action="{% url 'review-vote' review_request.pk %}" class="form-horizontal">
                 {% csrf_token %}
 
@@ -294,11 +315,13 @@
                     </div>
                 </div>
             </form>
+            {% endif %}{# end has_pending_items else #}
+
         </div>
     </div>
     {% endif %}
 
-    {% if is_owner and review_request.state != "cancelled" %}
+    {% if is_owner and review_request.state != "cancelled" and not is_locked %}
     <div class="card-pf">
         <div class="card-pf-body">
             <form method="post" action="{% url 'review-cancel' review_request.pk %}"
@@ -308,6 +331,33 @@
                     <i class="fa fa-ban" aria-hidden="true"></i> {% trans "Cancel review request" %}
                 </button>
             </form>
+        </div>
+    </div>
+    {% endif %}
+
+    {# Audit trail / activity feed — derived from django-simple-history #}
+    {% if activity %}
+    <div class="card-pf">
+        <div class="card-pf-heading">
+            <h3 class="card-pf-title">
+                <i class="fa fa-history" aria-hidden="true"></i> {% trans "Activity" %}
+            </h3>
+        </div>
+        <div class="card-pf-body">
+            <ul class="review-activity-feed list-unstyled">
+                {% for entry in activity %}
+                <li class="review-activity-entry review-activity-{{ entry.kind }}">
+                    <div class="review-activity-meta">
+                        <span class="review-activity-timestamp">{{ entry.timestamp|date:"Y-m-d H:i" }}</span>
+                        <span class="review-activity-user">{% if entry.user %}{{ entry.user.username }}{% else %}{% trans "system" %}{% endif %}</span>
+                    </div>
+                    <div class="review-activity-body">
+                        <strong>{{ entry.label }}</strong>
+                        <span class="text-muted">· {{ entry.detail }}</span>
+                    </div>
+                </li>
+                {% endfor %}
+            </ul>
         </div>
     </div>
     {% endif %}

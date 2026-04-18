@@ -45,12 +45,32 @@ class ReviewRequest(models.Model):
     def get_absolute_url(self):
         return reverse("review-get", args=[self.pk])
 
+    @property
+    def is_locked(self) -> bool:
+        """Approved requests are locked for further modification.
+
+        Cancelled requests are not locked in the same sense — they stay
+        immutable by state-machine rule, but the server never refuses
+        an idempotent save for them. "Locked" in this context means the
+        HTML views and RPC methods actively refuse to mutate the object.
+        """
+        return self.state == State.APPROVED
+
+    @property
+    def has_pending_items(self) -> bool:
+        """True if any ReviewItem.decision is still PENDING.
+
+        Reviewers cannot cast their final vote until every attached case
+        has a per-case decision.
+        """
+        return self.items.filter(decision=ReviewItem.PENDING).exists()
+
     def recalculate_state(self) -> str:
         """Recompute state from current votes and persist if it changed.
 
-        Cancelled requests are immutable until reopened.
+        Cancelled or approved requests are immutable.
         """
-        if self.state == State.CANCELLED:
+        if self.state in (State.CANCELLED, State.APPROVED):
             return self.state
 
         snapshots = [

@@ -25,7 +25,7 @@ class ReviewConfig(AppConfig):
             settings.MIDDLEWARE = list(settings.MIDDLEWARE) + [middleware_path]
 
         from tcms_review import signals as review_signals  # noqa: WPS433
-        from tcms_review.models import ReviewRequest, ReviewVote
+        from tcms_review.models import ReviewItem, ReviewRequest, ReviewVote
 
         pre_save.connect(
             review_signals.cache_previous_state,
@@ -46,6 +46,11 @@ class ReviewConfig(AppConfig):
             review_signals.handle_emails_post_review_vote_save,
             sender=ReviewVote,
             dispatch_uid="tcms_review.email_post_vote_save",
+        )
+        post_save.connect(
+            review_signals.handle_testcase_status_transition,
+            sender=ReviewItem,
+            dispatch_uid="tcms_review.status_transition",
         )
 
     @staticmethod

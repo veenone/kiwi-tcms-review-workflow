@@ -95,7 +95,16 @@ class Get(DetailView):
         ctx["vote_form"] = VoteForm()
         ctx["is_reviewer"] = self.object.reviewers.filter(pk=self.request.user.pk).exists()
         ctx["is_owner"] = self.object.requester_id == self.request.user.pk
+        ctx["is_locked"] = self.object.is_locked
+        ctx["has_pending_items"] = self.object.has_pending_items
+        ctx["can_vote"] = (
+            ctx["is_reviewer"]
+            and not ctx["is_locked"]
+            and self.object.state != State.CANCELLED
+            and not ctx["has_pending_items"]
+        )
         ctx["metrics"] = reports.metrics(self.object)
+        ctx["activity"] = _build_activity_feed(self.object)
         return ctx
 
 
@@ -106,12 +115,20 @@ class Edit(UpdateView):
     form_class = NewReviewRequestForm
     template_name = "tcms_review/mutable.html"
 
+    def dispatch(self, request, *args, **kwargs):
+        obj = self.get_object()
+        if obj.is_locked:
+            raise PermissionDenied("This review request is approved and can no longer be modified.")
+        return super().dispatch(request, *args, **kwargs)
+
 
 @method_decorator(login_required, name="dispatch")
 @method_decorator(permission_required("tcms_review.change_reviewrequest"), name="dispatch")
 class Cancel(View):
     def post(self, request, pk):
         review_request = get_object_or_404(ReviewRequest, pk=pk)
+        if review_request.is_locked:
+            raise PermissionDenied("Approved review requests cannot be cancelled.")
         if review_request.requester_id != request.user.pk:
             raise PermissionDenied("Only the requester can cancel a review request.")
         if review_request.state != State.CANCELLED:
@@ -125,10 +142,16 @@ class Cancel(View):
 class Vote(View):
     def post(self, request, pk):
         review_request = get_object_or_404(ReviewRequest, pk=pk)
+        if review_request.is_locked:
+            raise PermissionDenied("This review request is approved and can no longer be voted on.")
         if not review_request.reviewers.filter(pk=request.user.pk).exists():
             raise PermissionDenied("Only assigned reviewers can vote on this request.")
         if review_request.state == State.CANCELLED:
             raise PermissionDenied("Cannot vote on a cancelled review request.")
+        if review_request.has_pending_items:
+            raise PermissionDenied(
+                "All cases must have a decision recorded before you can cast your vote."
+            )
 
         form = VoteForm(request.POST)
         if not form.is_valid():
@@ -150,6 +173,8 @@ class Vote(View):
 class ItemDecision(View):
     def post(self, request, pk):
         item = get_object_or_404(ReviewItem.objects.select_related("review_request"), pk=pk)
+        if item.review_request.is_locked:
+            raise PermissionDenied("This review request is approved and can no longer be modified.")
         decision = request.POST.get("decision", ReviewItem.PENDING)
         comment = request.POST.get("comment", "")
         valid = {choice for choice, _ in ReviewItem.DECISION_CHOICES}
@@ -159,6 +184,70 @@ class ItemDecision(View):
         item.comment = comment
         item.save(update_fields=["decision", "comment", "updated_at"])
         return HttpResponseRedirect(item.review_request.get_absolute_url())
+
+
+def _build_activity_feed(review_request):
+    """Derive a unified audit trail from the three HistoricalRecords managers.
+
+    Each entry is {timestamp, user, kind, label, change}. Sorted newest first.
+    No new table required — django-simple-history is already tracking
+    everything we need.
+    """
+    entries = []
+
+    for h in review_request.history.all():
+        entries.append({
+            "timestamp": h.history_date,
+            "user": h.history_user,
+            "kind": "request",
+            "label": _history_label(h),
+            "change": h.history_change_reason or "",
+            "detail": f"#{review_request.pk} {h.title}",
+        })
+
+    for item in review_request.items.all():
+        for h in item.history.all():
+            entries.append({
+                "timestamp": h.history_date,
+                "user": h.history_user,
+                "kind": "item",
+                "label": _history_label(h, for_decision=True),
+                "change": h.history_change_reason or "",
+                "detail": f"Case #{h.case_id} → {h.get_decision_display()}",
+            })
+
+    for vote in review_request.votes.all():
+        for h in vote.history.all():
+            entries.append({
+                "timestamp": h.history_date,
+                "user": h.history_user or h.reviewer,
+                "kind": "vote",
+                "label": _history_label(h, for_vote=True),
+                "change": h.history_change_reason or "",
+                "detail": f"{h.reviewer.username}: {h.get_decision_display()}",
+            })
+
+    entries.sort(key=lambda e: e["timestamp"], reverse=True)
+    return entries
+
+
+def _history_label(hist_record, for_decision=False, for_vote=False):
+    t = hist_record.history_type
+    if for_decision:
+        if t == "+":
+            return "Case added"
+        if t == "-":
+            return "Case removed"
+        return "Case decision updated"
+    if for_vote:
+        if t == "+":
+            return "Vote cast"
+        return "Vote updated"
+    if t == "+":
+        return "Review request created"
+    if t == "-":
+        return "Review request deleted"
+    return "Review request updated"
 
 
 @method_decorator(login_required, name="dispatch")

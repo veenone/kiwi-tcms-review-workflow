@@ -109,3 +109,74 @@
         flex-basis: 100%;
     }
 }
+
+/* ── Audit-trail timeline ─────────────────────────────────────────── */
+
+.review-activity-feed {
+    margin: 0;
+    padding: 0;
+}
+
+.review-activity-entry {
+    display: flex;
+    align-items: flex-start;
+    padding: 10px 0;
+    border-bottom: 1px dashed #ededed;
+}
+
+.review-activity-entry:last-child {
+    border-bottom: none;
+}
+
+.review-activity-meta {
+    flex: 0 0 200px;
+    font-size: 12px;
+    color: #72767b;
+}
+
+.review-activity-timestamp {
+    display: block;
+    font-variant-numeric: tabular-nums;
+}
+
+.review-activity-user {
+    display: block;
+    font-weight: 600;
+    color: #292e34;
+}
+
+.review-activity-body {
+    flex: 1;
+    padding-left: 12px;
+    border-left: 3px solid #bbbbbb;
+}
+
+.review-activity-request .review-activity-body { border-left-color: #39a5dc; }
+.review-activity-item .review-activity-body    { border-left-color: #ec7a08; }
+.review-activity-vote .review-activity-body    { border-left-color: #3f9c35; }
+
+/* ── Error modal ──────────────────────────────────────────────────── */
+
+#review-error-modal .modal-header {
+    background: #c00;
+    color: #fff;
+    border-bottom: none;
+    border-top-left-radius: 4px;
+    border-top-right-radius: 4px;
+}
+
+#review-error-modal .modal-title .pficon,
+#review-error-modal .modal-title .fa {
+    margin-right: 6px;
+}
+
+#review-error-modal .modal-title .close {
+    color: #fff;
+    opacity: 0.85;
+    text-shadow: none;
+}
+
+#review-confirm-modal .modal-header {
+    background: #ec7a08;
+    color: #fff;
+}

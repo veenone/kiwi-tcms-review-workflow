@@ -1,6 +1,6 @@
 [project]
 name = "kiwitcms-review"
-version = "0.2.0"
+version = "0.3.0"
 description = "Test case review workflow plugin for Kiwi TCMS: group test cases into review requests, assign reviewers, collect votes, and track KPIs."
 readme = "README.md"
 license = "GPL-2.0-or-later"

@@ -7,6 +7,7 @@ from django.db.models.signals import m2m_changed, post_save, pre_save
 from django.urls import reverse
 from django.utils.translation import gettext_lazy as _
 
+from tcms_review.conf import get_status_transitions
 from tcms_review.state_machine import State
 
 _PRE_SAVE_STATE_ATTR = "_tcms_review_previous_state"
@@ -132,3 +133,44 @@ def handle_emails_post_review_vote_save(sender, instance, created, **kwargs):
     # automatically. Cancelled requests short-circuit inside recalculate_state.
     if instance.review_request.state != State.CANCELLED:
         instance.review_request.recalculate_state()
+
+
+def handle_testcase_status_transition(sender, instance, created, **kwargs):
+    """Apply REVIEW_STATUS_TRANSITIONS when a ReviewItem decision changes.
+
+    The setting maps (source_case_status, decision) -> target_case_status.
+    When a ReviewItem.decision is updated and the linked TestCase's
+    current status name matches the source, the case's status is set
+    to the target. No-op for unmatched decisions.
+
+    Skipped entirely when the plugin hasn't been configured with
+    transitions, so default installs don't touch case statuses.
+    """
+    if kwargs.get("raw"):
+        return
+
+    transitions = get_status_transitions()
+    if not transitions:
+        return
+
+    from tcms.testcases.models import TestCaseStatus  # noqa: WPS433
+
+    case = instance.case
+    if case is None or case.case_status is None:
+        return
+
+    key = (case.case_status.name.upper(), instance.decision.lower())
+    target = transitions.get(key)
+    if not target:
+        return
+
+    try:
+        target_status = TestCaseStatus.objects.get(name__iexact=target)
+    except TestCaseStatus.DoesNotExist:
+        return
+
+    if case.case_status_id == target_status.pk:
+        return
+
+    case.case_status = target_status
+    case.save(update_fields=["case_status"])
