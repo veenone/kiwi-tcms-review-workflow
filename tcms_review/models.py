@@ -38,6 +38,12 @@ class ReviewRequest(models.Model):
 
     class Meta:
         ordering = ["-created_at"]
+        indexes = [
+            models.Index(
+                fields=["state", "due_date"],
+                name="tcms_review_req_state_due_idx",
+            ),
+        ]
 
     def __str__(self):
         return f"ReviewRequest #{self.pk}: {self.title}"
@@ -117,6 +123,89 @@ class ReviewItem(models.Model):
 
     class Meta:
         unique_together = [("review_request", "case")]
+
+
+class ReviewConfig(models.Model):
+    """Singleton row holding plugin-wide configuration that the admin can
+    tweak via the Django admin. There's always exactly one row (pk=1).
+
+    Values stored here take priority over the Django settings fallbacks
+    in tcms_review.conf, so operators can tune the plugin at runtime
+    without restarting the Kiwi process or editing a settings file.
+    """
+
+    SINGLETON_PK = 1
+
+    allowed_case_statuses = models.JSONField(
+        default=list,
+        blank=True,
+        help_text=(
+            "List of TestCaseStatus.name values allowed for review. "
+            "Leave empty to fall back to REVIEW_ALLOWED_CASE_STATUSES "
+            "(default: ['PROPOSED'])."
+        ),
+    )
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        verbose_name = "Review plugin configuration"
+        verbose_name_plural = "Review plugin configuration"
+
+    def __str__(self):
+        return "Review plugin configuration"
+
+    def save(self, *args, **kwargs):
+        # Enforce singleton — always write the same pk
+        self.pk = self.SINGLETON_PK
+        super().save(*args, **kwargs)
+
+    @classmethod
+    def get(cls):
+        obj, _ = cls.objects.get_or_create(pk=cls.SINGLETON_PK)
+        return obj
+
+
+class ReviewStatusTransition(models.Model):
+    """One row per (source_status, decision) → target_status rule.
+
+    When a ReviewItem.decision is set and matches (source_status,
+    decision), the linked TestCase.case_status is transitioned to
+    target_status automatically.
+
+    Editable from the Django admin. Matching is case-insensitive.
+    """
+
+    DECISION_CHOICES = [
+        ("approved", "Approved"),
+        ("needs_changes", "Needs changes"),
+        ("rejected", "Rejected"),
+    ]
+
+    source_status = models.CharField(
+        max_length=100,
+        help_text="TestCaseStatus.name that triggers the transition.",
+    )
+    decision = models.CharField(
+        max_length=32,
+        choices=DECISION_CHOICES,
+    )
+    target_status = models.CharField(
+        max_length=100,
+        help_text="TestCaseStatus.name to transition to.",
+    )
+    is_active = models.BooleanField(default=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    history = HistoricalRecords()
+
+    class Meta:
+        unique_together = [("source_status", "decision")]
+        ordering = ["source_status", "decision"]
+        verbose_name = "Review status transition"
+        verbose_name_plural = "Review status transitions"
+
+    def __str__(self):
+        return f"{self.source_status} + {self.get_decision_display()} → {self.target_status}"
 
 
 class ReviewVote(models.Model):

@@ -133,12 +133,36 @@ Restart your Kiwi process after install.
 
 ## Configuration
 
-All settings are optional.
+The plugin ships with a sensible default workflow configured out of the box. **No settings file edits are required** — on first install, the migration seeds the recommended status transitions into the database, and admins can edit them via the Kiwi admin UI.
+
+### Admin UI (recommended)
+
+After install, two admin pages become available under **Admin → Test Case Review**:
+
+| Page | Purpose |
+|---|---|
+| `admin/tcms_review/reviewconfig/` | Singleton config — edit the `Allowed case statuses` JSON list here |
+| `admin/tcms_review/reviewstatustransition/` | Add / edit / toggle status-transition rules |
+
+Default rules seeded on first install (migration `0005_seed_default_transitions`):
+
+| Source status | Decision | Target status |
+|---|---|---|
+| `PROPOSED` | Approved | `CONFIRMED` |
+| `PROPOSED` | Needs changes | `NEED_UPDATE` |
+| `PROPOSED` | Rejected | `DISABLED` |
+| `CONFIRMED` | Needs changes | `NEED_UPDATE` |
+
+Uncheck `Is active` on any row to temporarily disable a rule without deleting it. All edits are recorded by `django-simple-history` so you can audit config changes alongside the reviews themselves.
+
+### Django settings fallback
+
+If the DB has no rows (e.g. during a migration, or if you roll back `0005_seed_default_transitions`), the plugin falls back to these Django settings:
 
 | Setting | Default | Purpose |
 |---|---|---|
-| `REVIEW_ALLOWED_CASE_STATUSES` | `["PROPOSED"]` | List of `TestCaseStatus.name` values that can be submitted for review. Both the HTML views and the RPC `ReviewRequest.add_case` method enforce this list. |
-| `REVIEW_STATUS_TRANSITIONS` | `{}` | Auto-transition map for `TestCase.case_status` when a per-case review decision is set. Keys are `(source_status_name, decision)` tuples (decision: `approved` / `rejected` / `needs_changes`); values are target status names. |
+| `REVIEW_ALLOWED_CASE_STATUSES` | `["PROPOSED"]` | List of `TestCaseStatus.name` values that can be submitted for review |
+| `REVIEW_STATUS_TRANSITIONS` | `{}` | Auto-transition map for `TestCase.case_status` |
 
 Example in `tcms_settings_dir/review.py` or your own `local_settings.py`:
 
@@ -153,7 +177,7 @@ REVIEW_STATUS_TRANSITIONS = {
 }
 ```
 
-With this config, clicking "Needs changes" on any `PROPOSED` or `CONFIRMED` case flips its status to `NEED_UPDATE` automatically. The transition is captured in the audit trail via `django-simple-history`.
+**Resolution order**: DB rows → Django settings → plugin-shipped defaults.
 
 ---
 
