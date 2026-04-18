@@ -737,6 +737,76 @@
         });
     }
 
+    // ─── Activity feed: collapse-all / expand-all + thread pagination ──
+
+    function wireActivityFeed() {
+        var $wrapper = $('.review-activity-feed-wrapper');
+        if (!$wrapper.length) { return; }
+
+        var pageSize = parseInt($wrapper.data('page-size'), 10) || 5;
+        var $threads = $wrapper.find('.review-activity-thread');
+        var totalThreads = $threads.length;
+        var totalPages = Math.max(1, Math.ceil(totalThreads / pageSize));
+        var currentPage = 1;
+
+        function renderPage() {
+            $threads.each(function (i) {
+                var pageIndex = Math.floor(i / pageSize) + 1;
+                $(this).toggle(pageIndex === currentPage);
+            });
+            $wrapper.find('[data-review-activity-page-label]')
+                .text(currentPage + ' / ' + totalPages);
+            $wrapper.find('[data-review-activity-page="prev"]').parent()
+                .toggleClass('disabled', currentPage <= 1);
+            $wrapper.find('[data-review-activity-page="next"]').parent()
+                .toggleClass('disabled', currentPage >= totalPages);
+        }
+
+        // Chevron rotation on Bootstrap collapse events
+        $wrapper.on('show.bs.collapse', '.review-activity-thread-body', function () {
+            $(this).siblings('.review-activity-thread-header')
+                .find('.review-activity-chevron')
+                .removeClass('review-activity-chevron-rotated');
+        });
+        $wrapper.on('hide.bs.collapse', '.review-activity-thread-body', function () {
+            $(this).siblings('.review-activity-thread-header')
+                .find('.review-activity-chevron')
+                .addClass('review-activity-chevron-rotated');
+        });
+
+        // Expand-all / collapse-all
+        $wrapper.on('click', '[data-review-activity-action]', function () {
+            var action = $(this).data('review-activity-action');
+            var $bodies = $wrapper.find('.review-activity-thread-body');
+            if (action === 'expand-all') {
+                $bodies.collapse('show');
+            } else if (action === 'collapse-all') {
+                $bodies.collapse('hide');
+            }
+        });
+
+        // Keyboard support for collapse on thread headers
+        $wrapper.on('keydown', '.review-activity-thread-header', function (e) {
+            if (e.key === 'Enter' || e.key === ' ') {
+                e.preventDefault();
+                $(this).trigger('click');
+            }
+        });
+
+        // Pagination (only show if multiple pages)
+        if (totalPages > 1) {
+            $wrapper.find('.review-activity-pagination').show();
+            $wrapper.on('click', '[data-review-activity-page]', function (e) {
+                e.preventDefault();
+                var direction = $(this).data('review-activity-page');
+                if (direction === 'prev' && currentPage > 1) { currentPage--; }
+                if (direction === 'next' && currentPage < totalPages) { currentPage++; }
+                renderPage();
+            });
+            renderPage();
+        }
+    }
+
     // ─── Datepicker init for server-rendered forms ─────────────────────
 
     function initDatePickers() {
@@ -756,6 +826,7 @@
         wireConfirmForms();
         wireAddCaseForm();
         wireCaseBrowser();
+        wireActivityFeed();
         initDatePickers();
 
         var ctx = detectPageContext();

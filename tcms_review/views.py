@@ -301,6 +301,21 @@ def _build_activity_feed(review_request):
             })
 
     threads.sort(key=lambda t: t["opened_at"])
+
+    # Split each thread's entries into a visible tail (last 5) and a hidden
+    # older section, so the template can offer a "Show older" reveal
+    # without dumping 50 entries at once. Thread-level pagination (5
+    # threads per page) is handled client-side in inject.js.
+    tail = 5
+    for thread in threads:
+        entries = thread["entries"]
+        if len(entries) > tail:
+            thread["hidden_entries"] = entries[:-tail]
+            thread["visible_entries"] = entries[-tail:]
+        else:
+            thread["hidden_entries"] = []
+            thread["visible_entries"] = entries
+
     return threads
 
 

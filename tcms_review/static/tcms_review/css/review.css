@@ -112,6 +112,54 @@
 
 /* ── Threaded audit trail ─────────────────────────────────────────── */
 
+.review-activity-feed-wrapper {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+}
+
+.review-activity-toolbar {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 4px 0;
+}
+
+.review-activity-count {
+    margin-left: auto;
+    font-size: 12px;
+}
+
+.review-activity-show-older {
+    padding: 6px 14px 2px;
+    border-bottom: 1px dashed #ededed;
+}
+
+.review-activity-show-older .btn-link {
+    padding: 0;
+    font-size: 12px;
+    color: #72767b;
+}
+
+.review-activity-show-older .btn-link:hover {
+    color: #39a5dc;
+    text-decoration: none;
+}
+
+.review-activity-older {
+    background: rgba(0, 0, 0, 0.02);
+    border-bottom: 1px solid #ededed;
+}
+
+.review-activity-pagination {
+    margin: 0;
+}
+
+.review-activity-pagination .pagination {
+    margin: 0;
+}
+
+
 .review-activity-threads {
     display: flex;
     flex-direction: column;
@@ -138,6 +186,29 @@
     background: #fff;
     border-bottom: 1px solid #ededed;
     font-weight: 600;
+    cursor: pointer;
+    user-select: none;
+    transition: background 0.15s ease;
+}
+
+.review-activity-thread-header:hover,
+.review-activity-thread-header:focus {
+    background: #f5f5f5;
+    outline: none;
+}
+
+.review-activity-thread-header:focus {
+    box-shadow: inset 0 0 0 2px #39a5dc;
+}
+
+.review-activity-chevron {
+    font-size: 11px;
+    color: #72767b;
+    transition: transform 0.2s ease;
+}
+
+.review-activity-chevron-rotated {
+    transform: rotate(-90deg);
 }
 
 .review-activity-thread-title {

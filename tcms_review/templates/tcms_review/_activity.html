@@ -1,51 +1,87 @@
 {% load i18n %}
 {% comment %}
 Threaded activity feed. Callers pass `activity` in context as a list of
-threads, each with {kind, title, icon, entries, opened_at}.
+threads, each with {kind, title, icon, entries, visible_entries,
+hidden_entries, opened_at}. Pagination + per-thread collapse handled
+client-side via inject.js (wireActivityFeed).
 {% endcomment %}
-<div class="review-activity-threads">
-    {% for thread in activity %}
-    <div class="review-activity-thread review-activity-thread-{{ thread.kind }}">
-        <div class="review-activity-thread-header">
-            <i class="{{ thread.icon }}" aria-hidden="true"></i>
-            <span class="review-activity-thread-title">{{ thread.title }}</span>
-            <span class="review-activity-thread-meta">
-                {% blocktrans with count=thread.entries|length %}{{ count }} change(s){% endblocktrans %}
-                · {% trans "opened" %} {{ thread.opened_at|date:"Y-m-d H:i" }}
-            </span>
+{% if activity %}
+<div class="review-activity-feed-wrapper" data-page-size="5">
+
+    <div class="review-activity-toolbar">
+        <div class="btn-group btn-group-xs" role="group">
+            <button type="button" class="btn btn-default" data-review-activity-action="expand-all">
+                <i class="fa fa-chevron-down" aria-hidden="true"></i> {% trans "Expand all" %}
+            </button>
+            <button type="button" class="btn btn-default" data-review-activity-action="collapse-all">
+                <i class="fa fa-chevron-up" aria-hidden="true"></i> {% trans "Collapse all" %}
+            </button>
         </div>
-        <ul class="review-activity-thread-entries list-unstyled">
-            {% for entry in thread.entries %}
-            <li class="review-activity-entry review-activity-{{ entry.history_type }}">
-                <div class="review-activity-meta">
-                    <span class="review-activity-timestamp">{{ entry.timestamp|date:"Y-m-d H:i" }}</span>
-                    <span class="review-activity-user">
-                        {% if entry.user %}{{ entry.user.username }}{% else %}{% trans "system" %}{% endif %}
-                    </span>
-                </div>
-                <div class="review-activity-body">
-                    <div class="review-activity-summary">
-                        <strong>{{ entry.label }}</strong>
-                        {% if entry.detail %}<span class="text-muted"> · {{ entry.detail }}</span>{% endif %}
-                    </div>
-                    {% if entry.changes %}
-                    <ul class="review-activity-changes">
-                        {% for change in entry.changes %}
-                        <li class="review-activity-change">
-                            <span class="review-activity-field">{{ change.field }}</span>:
-                            <span class="review-activity-before">{{ change.before|truncatechars:120 }}</span>
-                            <i class="fa fa-long-arrow-right" aria-hidden="true"></i>
-                            <span class="review-activity-after">{{ change.after|truncatechars:120 }}</span>
-                        </li>
-                        {% endfor %}
-                    </ul>
-                    {% endif %}
-                </div>
-            </li>
-            {% endfor %}
-        </ul>
+        <span class="review-activity-count text-muted pull-right">
+            {% blocktrans with count=activity|length %}{{ count }} thread(s){% endblocktrans %}
+        </span>
     </div>
-    {% empty %}
-    <p class="text-muted">{% trans "No activity recorded yet." %}</p>
-    {% endfor %}
+
+    <div class="review-activity-threads">
+        {% for thread in activity %}
+        <div class="review-activity-thread review-activity-thread-{{ thread.kind }}"
+             data-thread-index="{{ forloop.counter0 }}">
+
+            <div class="review-activity-thread-header"
+                 data-toggle="collapse"
+                 data-target="#review-thread-body-{{ forloop.counter }}"
+                 aria-expanded="true"
+                 role="button"
+                 tabindex="0">
+                <i class="fa fa-chevron-down review-activity-chevron" aria-hidden="true"></i>
+                <i class="{{ thread.icon }}" aria-hidden="true"></i>
+                <span class="review-activity-thread-title">{{ thread.title }}</span>
+                <span class="review-activity-thread-meta">
+                    {% blocktrans with count=thread.entries|length %}{{ count }} change(s){% endblocktrans %}
+                    · {% trans "opened" %} {{ thread.opened_at|date:"Y-m-d H:i" }}
+                </span>
+            </div>
+
+            <div class="collapse in review-activity-thread-body"
+                 id="review-thread-body-{{ forloop.counter }}">
+
+                {% if thread.hidden_entries %}
+                <div class="review-activity-show-older">
+                    <button type="button" class="btn btn-link btn-xs"
+                            data-toggle="collapse"
+                            data-target="#review-thread-older-{{ forloop.counter }}"
+                            aria-expanded="false">
+                        <i class="fa fa-history" aria-hidden="true"></i>
+                        {% blocktrans with count=thread.hidden_entries|length %}Show {{ count }} older change(s){% endblocktrans %}
+                    </button>
+                </div>
+                <ul class="collapse review-activity-thread-entries review-activity-older list-unstyled"
+                    id="review-thread-older-{{ forloop.counter }}">
+                    {% for entry in thread.hidden_entries %}
+                    {% include "tcms_review/_activity_entry.html" with entry=entry %}
+                    {% endfor %}
+                </ul>
+                {% endif %}
+
+                <ul class="review-activity-thread-entries list-unstyled">
+                    {% for entry in thread.visible_entries %}
+                    {% include "tcms_review/_activity_entry.html" with entry=entry %}
+                    {% endfor %}
+                </ul>
+            </div>
+        </div>
+        {% endfor %}
+    </div>
+
+    <nav class="review-activity-pagination" aria-label="{% trans 'Activity pagination' %}" style="display:none;">
+        <ul class="pagination pagination-sm">
+            <li><a href="#" data-review-activity-page="prev">« {% trans "Previous" %}</a></li>
+            <li class="active"><span data-review-activity-page-label>1 / 1</span></li>
+            <li><a href="#" data-review-activity-page="next">{% trans "Next" %} »</a></li>
+        </ul>
+    </nav>
+
 </div>
+{% else %}
+<p class="text-muted">{% trans "No activity recorded yet." %}</p>
+{% endif %}
