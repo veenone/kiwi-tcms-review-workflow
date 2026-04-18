@@ -121,13 +121,84 @@
         <div class="card-pf-body">
             {% if review_request.state != "cancelled" %}
             <div id="review-add-case-form" data-review-pk="{{ review_request.pk }}"
-                 class="form-inline" style="margin-bottom:12px; position:relative;">
-                <div class="form-group" style="position:relative;">
-                    <input type="text" id="review-add-case-input" class="form-control"
-                           placeholder="{% trans 'Search test case by ID or summary...' %}"
-                           autocomplete="off" style="width:360px;">
-                    <ul class="dropdown-menu review-add-case-results"
-                        style="display:none; position:absolute; z-index:1060; min-width:360px;"></ul>
+                 style="margin-bottom:16px;">
+
+                <ul class="nav nav-tabs" role="tablist" style="margin-bottom:12px;">
+                    <li role="presentation" class="active">
+                        <a href="#review-tab-search" data-toggle="tab" role="tab">
+                            <i class="fa fa-search" aria-hidden="true"></i> {% trans "Search" %}
+                        </a>
+                    </li>
+                    <li role="presentation">
+                        <a href="#review-tab-case-browser" data-toggle="tab" role="tab">
+                            <i class="fa fa-list" aria-hidden="true"></i> {% trans "TestCase browser" %}
+                        </a>
+                    </li>
+                    <li role="presentation">
+                        <a href="#review-tab-plan-browser" data-toggle="tab" role="tab">
+                            <i class="fa fa-sitemap" aria-hidden="true"></i> {% trans "TestPlan browser" %}
+                        </a>
+                    </li>
+                </ul>
+
+                <div class="tab-content">
+                    <div class="tab-pane active" id="review-tab-search" role="tabpanel">
+                        <div class="form-group" style="position:relative;">
+                            <input type="text" id="review-add-case-input" class="form-control"
+                                   placeholder="{% trans 'Search test case by ID or summary...' %}"
+                                   autocomplete="off" style="width:360px;">
+                            <ul class="dropdown-menu review-add-case-results"
+                                style="display:none; position:absolute; z-index:1060; min-width:360px;"></ul>
+                        </div>
+                    </div>
+
+                    <div class="tab-pane" id="review-tab-case-browser" role="tabpanel">
+                        <div class="form-inline" style="margin-bottom:8px;">
+                            <div class="form-group">
+                                <label class="sr-only" for="review-case-browser-filter">{% trans "Filter" %}</label>
+                                <input type="text" id="review-case-browser-filter" class="form-control"
+                                       placeholder="{% trans 'Filter by summary...' %}" style="width:300px;">
+                            </div>
+                            <button type="button" id="review-case-browser-load" class="btn btn-default">
+                                <i class="fa fa-refresh" aria-hidden="true"></i> {% trans "Load" %}
+                            </button>
+                        </div>
+                        <div class="table-responsive" style="max-height:300px; overflow-y:auto;">
+                            <table class="table table-hover table-condensed" id="review-case-browser-table">
+                                <thead><tr>
+                                    <th style="width:40px;"></th>
+                                    <th style="width:60px;">#</th>
+                                    <th>{% trans "Summary" %}</th>
+                                    <th style="width:100px;">{% trans "Status" %}</th>
+                                </tr></thead>
+                                <tbody></tbody>
+                            </table>
+                        </div>
+                    </div>
+
+                    <div class="tab-pane" id="review-tab-plan-browser" role="tabpanel">
+                        <div class="form-inline" style="margin-bottom:8px;">
+                            <div class="form-group">
+                                <label class="sr-only" for="review-plan-browser-filter">{% trans "Filter" %}</label>
+                                <input type="text" id="review-plan-browser-filter" class="form-control"
+                                       placeholder="{% trans 'Filter by plan name...' %}" style="width:300px;">
+                            </div>
+                            <button type="button" id="review-plan-browser-load" class="btn btn-default">
+                                <i class="fa fa-refresh" aria-hidden="true"></i> {% trans "Load" %}
+                            </button>
+                        </div>
+                        <div class="table-responsive" style="max-height:300px; overflow-y:auto;">
+                            <table class="table table-hover table-condensed" id="review-plan-browser-table">
+                                <thead><tr>
+                                    <th style="width:60px;">#</th>
+                                    <th>{% trans "Plan name" %}</th>
+                                    <th style="width:80px;">{% trans "Cases" %}</th>
+                                    <th style="width:80px;"></th>
+                                </tr></thead>
+                                <tbody></tbody>
+                            </table>
+                        </div>
+                    </div>
                 </div>
             </div>
             {% endif %}

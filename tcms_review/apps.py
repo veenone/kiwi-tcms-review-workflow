@@ -8,12 +8,11 @@ class ReviewConfig(AppConfig):
     verbose_name = "Test Case Review"
 
     def ready(self):
-        # Register our XML-RPC module with modernrpc. Kiwi auto-discovers
-        # plugin URLs and INSTALLED_APPS but does not extend
-        # MODERNRPC_METHODS_MODULES, so we do it here.
-        rpc_module = "tcms_review.api"
-        if rpc_module not in settings.MODERNRPC_METHODS_MODULES:
-            settings.MODERNRPC_METHODS_MODULES.append(rpc_module)
+        # Register RPC methods directly into the modernrpc registry.
+        # We can't just append to MODERNRPC_METHODS_MODULES because
+        # modernrpc.apps.ModernRpcConfig.ready() scans that list BEFORE
+        # plugin apps run ready() — by the time we append, the scan is done.
+        self._register_rpc_methods()
 
         # Register the response-rewriting middleware that injects the
         # plugin's JS bundle into every HTML response so the "Send for
@@ -25,7 +24,7 @@ class ReviewConfig(AppConfig):
         if middleware_path not in settings.MIDDLEWARE:
             settings.MIDDLEWARE = list(settings.MIDDLEWARE) + [middleware_path]
 
-        from tcms_review import signals as review_signals
+        from tcms_review import signals as review_signals  # noqa: WPS433
         from tcms_review.models import ReviewRequest, ReviewVote
 
         pre_save.connect(
@@ -48,3 +47,19 @@ class ReviewConfig(AppConfig):
             sender=ReviewVote,
             dispatch_uid="tcms_review.email_post_vote_save",
         )
+
+    @staticmethod
+    def _register_rpc_methods():
+        """Register tcms_review.api methods directly into the modernrpc
+        registry. This mirrors what modernrpc.apps.import_modules() does
+        but runs from the plugin's own ready() — after modernrpc has
+        already finished its scan of MODERNRPC_METHODS_MODULES."""
+        import inspect  # noqa: WPS433
+
+        from modernrpc.core import registry  # noqa: WPS433
+
+        import tcms_review.api as api_module  # noqa: WPS433
+
+        for _, func in inspect.getmembers(api_module, inspect.isfunction):
+            if getattr(func, "modernrpc_enabled", False):
+                registry.register_method(func)

@@ -422,6 +422,91 @@
         });
     }
 
+    // ─── Review detail: TestCase / TestPlan browser tabs ────────────────
+
+    function wireCaseBrowser() {
+        var $form = $('#review-add-case-form');
+        if (!$form.length) { return; }
+        var reviewPk = $form.data('review-pk');
+
+        function addCaseToReview(caseId) {
+            jsonRPC('ReviewRequest.add_case', [reviewPk, caseId], function () {
+                window.location.reload();
+            });
+        }
+
+        // TestCase browser
+        $('#review-case-browser-load').on('click', function () {
+            var filter = $.trim($('#review-case-browser-filter').val());
+            var rpcQuery = filter ? { summary__icontains: filter } : {};
+            jsonRPC('TestCase.filter', rpcQuery, function (data) {
+                var $tbody = $('#review-case-browser-table tbody').empty();
+                if (!data || !data.length) {
+                    $tbody.append('<tr><td colspan="4" class="text-muted">No cases found</td></tr>');
+                    return;
+                }
+                $.each(data.slice(0, 50), function (i, tc) {
+                    var $row = $('<tr/>');
+                    var $addBtn = $('<button class="btn btn-xs btn-default" title="Add to review"><i class="fa fa-plus"></i></button>');
+                    $addBtn.on('click', function () { addCaseToReview(tc.id); });
+                    $row.append($('<td/>').append($addBtn));
+                    $row.append($('<td/>').text(tc.id));
+                    $row.append($('<td/>').append($('<a/>').attr('href', '/case/' + tc.id + '/').text(tc.summary)));
+                    $row.append($('<td/>').text(tc.case_status__name || tc.case_status || ''));
+                    $tbody.append($row);
+                });
+            });
+        });
+
+        // TestPlan browser — load plans, then expand to show cases
+        $('#review-plan-browser-load').on('click', function () {
+            var filter = $.trim($('#review-plan-browser-filter').val());
+            var rpcQuery = filter ? { name__icontains: filter } : {};
+            jsonRPC('TestPlan.filter', rpcQuery, function (data) {
+                var $tbody = $('#review-plan-browser-table tbody').empty();
+                if (!data || !data.length) {
+                    $tbody.append('<tr><td colspan="4" class="text-muted">No plans found</td></tr>');
+                    return;
+                }
+                $.each(data.slice(0, 30), function (i, plan) {
+                    var $row = $('<tr/>');
+                    $row.append($('<td/>').text(plan.id));
+                    $row.append($('<td/>').append($('<a/>').attr('href', '/plan/' + plan.id + '/').text(plan.name)));
+                    $row.append($('<td/>').text('—'));
+                    var $expandBtn = $('<button class="btn btn-xs btn-default" title="Show cases"><i class="fa fa-chevron-down"></i></button>');
+                    $expandBtn.on('click', function () {
+                        var $nextRow = $row.next('.review-plan-cases-row');
+                        if ($nextRow.length) {
+                            $nextRow.toggle();
+                            return;
+                        }
+                        jsonRPC('TestCase.filter', { plan: plan.id }, function (cases) {
+                            var $casesRow = $('<tr class="review-plan-cases-row"/>');
+                            var $td = $('<td colspan="4" style="padding-left:30px;"/>');
+                            if (!cases || !cases.length) {
+                                $td.append('<span class="text-muted">No cases in this plan</span>');
+                            } else {
+                                var $ul = $('<ul class="list-unstyled" style="margin:0;"/>');
+                                $.each(cases.slice(0, 50), function (j, tc) {
+                                    var $li = $('<li style="padding:2px 0;"/>');
+                                    var $btn = $('<button class="btn btn-xs btn-default" style="margin-right:6px;"><i class="fa fa-plus"></i></button>');
+                                    $btn.on('click', function () { addCaseToReview(tc.id); });
+                                    $li.append($btn).append('TC-' + tc.id + ': ' + tc.summary);
+                                    $ul.append($li);
+                                });
+                                $td.append($ul);
+                            }
+                            $casesRow.append($td);
+                            $row.after($casesRow);
+                        });
+                    });
+                    $row.append($('<td/>').append($expandBtn));
+                    $tbody.append($row);
+                });
+            });
+        });
+    }
+
     // ─── Datepicker init for server-rendered forms ─────────────────────
 
     function initDatePickers() {
@@ -440,6 +525,7 @@
     $(function () {
         wireConfirmForms();
         wireAddCaseForm();
+        wireCaseBrowser();
         initDatePickers();
 
         var ctx = detectPageContext();
