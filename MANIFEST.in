@@ -1,5 +1,10 @@
 include README.md
 include LICENSE
-recursive-include tcms_review/templates *
-recursive-include tcms_review/static *
+include pyproject.toml
+recursive-include tcms_review/templates *.html *.txt
+recursive-include tcms_review/static *.js *.css *.map
 recursive-include tcms_review/migrations *.py
+recursive-include docs/screenshots *.png
+global-exclude *.pyc
+global-exclude __pycache__
+global-exclude .DS_Store

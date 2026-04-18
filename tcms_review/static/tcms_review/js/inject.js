@@ -51,17 +51,19 @@
 
     function detectPageContext() {
         var pageId = (document.body && document.body.id) || '';
+        var path = window.location.pathname || '';
 
-        if (pageId === 'page-testcases-get') {
+        if (pageId === 'page-testcases-get' || /^\/case\/\d+\//.test(path)) {
             var $span = $('#test_case_pk');
-            return { kind: 'testcase', pk: $span.data('pk') || null };
+            var casePk = $span.data('pk') || pkFromUrl(/\/case\/(\d+)/);
+            return { kind: 'testcase', pk: casePk };
         }
-        if (pageId === 'page-testplans-get') {
+        if (pageId === 'page-testplans-get' || /^\/plan\/\d+\//.test(path)) {
             var $container = $('[data-testplan-pk]');
-            var pk = $container.data('testplan-pk') || pkFromUrl(/\/plan\/(\d+)/);
-            return { kind: 'testplan', pk: pk };
+            var planPk = $container.data('testplan-pk') || pkFromUrl(/\/plan\/(\d+)/);
+            return { kind: 'testplan', pk: planPk };
         }
-        if (pageId === 'page-dashboard' || pageId === 'core-views-index') {
+        if (pageId === 'page-dashboard' || pageId === 'core-views-index' || path === '/') {
             return { kind: 'dashboard' };
         }
         return null;

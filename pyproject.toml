@@ -1,30 +1,61 @@
 [project]
 name = "kiwitcms-review"
-version = "0.1.0"
-description = "Test case review workflow plugin for Kiwi TCMS — group cases into review requests, assign reviewers, collect votes, and notify by email"
+version = "0.2.0"
+description = "Test case review workflow plugin for Kiwi TCMS: group test cases into review requests, assign reviewers, collect votes, and track KPIs."
 readme = "README.md"
 license = "GPL-2.0-or-later"
 requires-python = ">=3.9"
-dependencies = []
+dependencies = [
+    "Django>=3.2",
+    "django-simple-history>=3.0",
+    "django-modern-rpc>=1.0",
+]
 authors = [{ name = "Achmad Fienan Rahardianto", email = "veenone@gmail.com" }]
 classifiers = [
     "Framework :: Django",
+    "Framework :: Django :: 3.2",
+    "Framework :: Django :: 4.2",
+    "Framework :: Django :: 5.0",
+    "Framework :: Django :: 5.2",
     "Intended Audience :: Developers",
+    "Intended Audience :: Information Technology",
+    "Operating System :: OS Independent",
     "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.9",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
     "Topic :: Software Development :: Quality Assurance",
     "Topic :: Software Development :: Testing",
 ]
-keywords = ["tcms", "kiwi", "plugin", "review", "workflow"]
+keywords = ["tcms", "kiwi", "plugin", "review", "workflow", "testing"]
+
+[project.optional-dependencies]
+dev = [
+    "build>=1.0",
+    "twine>=4.0",
+    "factory-boy>=3.0",
+]
 
 [project.entry-points."kiwitcms.plugins"]
 reviews = "tcms_review"
 
 [project.urls]
-Homepage = "https://github.com/veenone/kiwitcms-review"
+Homepage = "https://github.com/veenone/kiwi-tcms-review-workflow"
+Repository = "https://github.com/veenone/kiwi-tcms-review-workflow"
+Issues = "https://github.com/veenone/kiwi-tcms-review-workflow/issues"
 
 [build-system]
-requires = ["setuptools>=61"]
+requires = ["setuptools>=61", "wheel"]
 build-backend = "setuptools.build_meta"
 
 [tool.setuptools.packages.find]
 include = ["tcms_review*"]
+
+[tool.setuptools.package-data]
+tcms_review = [
+    "templates/**/*.html",
+    "templates/**/*.txt",
+    "static/**/*",
+    "migrations/*.py",
+]

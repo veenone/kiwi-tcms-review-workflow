@@ -3,6 +3,10 @@
 
 {% block head %}
     <link rel="stylesheet" href="{% static 'tcms_review/css/review.css' %}">
+    <link rel="stylesheet" href="{% static 'tcms_review/vendor/c3.min.css' %}">
+    <script src="{% static 'tcms_review/vendor/d3.min.js' %}"></script>
+    <script src="{% static 'tcms_review/vendor/c3.min.js' %}"></script>
+    <script src="{% static 'tcms_review/js/charts.js' %}" defer></script>
 {% endblock %}
 
 {% block title %}{% trans "Review statistics" %}{% endblock %}
@@ -17,16 +21,94 @@
         <li class="active">{% trans "Statistics" %}</li>
     </ol>
 
+    {# KPI strip — one card per key metric #}
+    <div class="card-pf">
+        <div class="card-pf-heading">
+            <h2 class="card-pf-title">
+                <i class="fa fa-tachometer" aria-hidden="true"></i>
+                {% trans "KPI overview" %}
+            </h2>
+        </div>
+        <div class="card-pf-body">
+            <div class="review-aggregate" role="group" aria-label="{% trans 'Review KPIs' %}">
+                <div class="aggregate-status-pf">
+                    <div class="aggregate-status-pf-title">{% trans "Open requests" %}</div>
+                    <div class="aggregate-status-pf-count">{{ open_requests }}</div>
+                </div>
+                <div class="aggregate-status-pf">
+                    <div class="aggregate-status-pf-title">{% trans "Overdue" %}</div>
+                    <div class="aggregate-status-pf-count {% if overdue_requests %}text-danger{% endif %}">
+                        {{ overdue_requests }}
+                    </div>
+                </div>
+                <div class="aggregate-status-pf">
+                    <div class="aggregate-status-pf-title">{% trans "Approval rate" %}</div>
+                    <div class="aggregate-status-pf-count">{{ approval_rate|floatformat:0 }}%</div>
+                </div>
+                <div class="aggregate-status-pf">
+                    <div class="aggregate-status-pf-title">{% trans "New (30d)" %}</div>
+                    <div class="aggregate-status-pf-count">{{ requests_last_30d }}</div>
+                </div>
+                <div class="aggregate-status-pf">
+                    <div class="aggregate-status-pf-title">{% trans "Closed (30d)" %}</div>
+                    <div class="aggregate-status-pf-count">{{ closed_last_30d }}</div>
+                </div>
+                <div class="aggregate-status-pf">
+                    <div class="aggregate-status-pf-title">{% trans "Votes (30d)" %}</div>
+                    <div class="aggregate-status-pf-count">{{ votes_last_30d }}</div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    {# Review time overview #}
+    <div class="card-pf">
+        <div class="card-pf-heading">
+            <h2 class="card-pf-title">
+                <i class="fa fa-clock-o" aria-hidden="true"></i>
+                {% trans "Review time overview" %}
+            </h2>
+        </div>
+        <div class="card-pf-body">
+            <div class="review-aggregate" role="group" aria-label="{% trans 'Review time KPIs' %}">
+                <div class="aggregate-status-pf">
+                    <div class="aggregate-status-pf-title">{% trans "Avg. time to decision" %}</div>
+                    <div class="aggregate-status-pf-count">
+                        {{ avg_time_to_decision|default:"—" }}
+                    </div>
+                </div>
+                <div class="aggregate-status-pf">
+                    <div class="aggregate-status-pf-title">{% trans "Median time to decision" %}</div>
+                    <div class="aggregate-status-pf-count">
+                        {{ median_time_to_decision|default:"—" }}
+                    </div>
+                </div>
+                <div class="aggregate-status-pf">
+                    <div class="aggregate-status-pf-title">{% trans "Fastest" %}</div>
+                    <div class="aggregate-status-pf-count text-success">
+                        {{ fastest_decision|default:"—" }}
+                    </div>
+                </div>
+                <div class="aggregate-status-pf">
+                    <div class="aggregate-status-pf-title">{% trans "Slowest" %}</div>
+                    <div class="aggregate-status-pf-count text-warning">
+                        {{ slowest_decision|default:"—" }}
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    {# Aggregate counts #}
     <div class="card-pf">
         <div class="card-pf-heading">
             <h2 class="card-pf-title">
                 <i class="fa fa-bar-chart" aria-hidden="true"></i>
-                {% trans "Review statistics" %}
+                {% trans "Totals" %}
             </h2>
         </div>
-
         <div class="card-pf-body">
-            <div class="review-aggregate" role="group" aria-label="{% trans 'Aggregate statistics' %}">
+            <div class="review-aggregate" role="group">
                 <div class="aggregate-status-pf">
                     <div class="aggregate-status-pf-title">{% trans "Total requests" %}</div>
                     <div class="aggregate-status-pf-count">{{ total_requests }}</div>
@@ -39,12 +121,33 @@
                     <div class="aggregate-status-pf-title">{% trans "Cases reviewed" %}</div>
                     <div class="aggregate-status-pf-count">{{ total_items }}</div>
                 </div>
-                {% if avg_time_to_decision %}
-                <div class="aggregate-status-pf">
-                    <div class="aggregate-status-pf-title">{% trans "Avg. time to decision" %}</div>
-                    <div class="aggregate-status-pf-count">{{ avg_time_to_decision }}</div>
+            </div>
+        </div>
+    </div>
+
+    {# Chart payload (consumed by charts.js) #}
+    <script type="application/json" id="review-stats-payload">{{ chart_payload_json|safe }}</script>
+
+    {# Charts #}
+    <div class="row">
+        <div class="col-md-6">
+            <div class="card-pf">
+                <div class="card-pf-heading">
+                    <h3 class="card-pf-title">{% trans "Requests by state" %}</h3>
                 </div>
-                {% endif %}
+                <div class="card-pf-body">
+                    <div id="review-chart-state" style="height:280px;"></div>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-6">
+            <div class="card-pf">
+                <div class="card-pf-heading">
+                    <h3 class="card-pf-title">{% trans "Activity (last 30 days)" %}</h3>
+                </div>
+                <div class="card-pf-body">
+                    <div id="review-chart-timeline" style="height:280px;"></div>
+                </div>
             </div>
         </div>
     </div>
@@ -53,7 +156,37 @@
         <div class="col-md-6">
             <div class="card-pf">
                 <div class="card-pf-heading">
-                    <h3 class="card-pf-title">{% trans "Requests by state" %}</h3>
+                    <h3 class="card-pf-title">{% trans "Top reviewers" %}</h3>
+                </div>
+                <div class="card-pf-body">
+                    <div id="review-chart-reviewers" style="height:280px;"></div>
+                    {% if not top_reviewers %}
+                    <p class="text-muted">{% trans "No votes cast yet." %}</p>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+        <div class="col-md-6">
+            <div class="card-pf">
+                <div class="card-pf-heading">
+                    <h3 class="card-pf-title">{% trans "Top requesters" %}</h3>
+                </div>
+                <div class="card-pf-body">
+                    <div id="review-chart-requesters" style="height:280px;"></div>
+                    {% if not top_requesters %}
+                    <p class="text-muted">{% trans "No review requests yet." %}</p>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+    </div>
+
+    {# Detail tables (kept for copy/paste and a11y fallback) #}
+    <div class="row">
+        <div class="col-md-6">
+            <div class="card-pf">
+                <div class="card-pf-heading">
+                    <h3 class="card-pf-title">{% trans "Requests by state (table)" %}</h3>
                 </div>
                 <div class="card-pf-body">
                     <div class="table-responsive">
@@ -72,11 +205,10 @@
                 </div>
             </div>
         </div>
-
         <div class="col-md-6">
             <div class="card-pf">
                 <div class="card-pf-heading">
-                    <h3 class="card-pf-title">{% trans "Top reviewers" %}</h3>
+                    <h3 class="card-pf-title">{% trans "Top reviewers (table)" %}</h3>
                 </div>
                 <div class="card-pf-body">
                     {% if top_reviewers %}
@@ -95,35 +227,6 @@
                     </div>
                     {% else %}
                     <p class="text-muted">{% trans "No votes cast yet." %}</p>
-                    {% endif %}
-                </div>
-            </div>
-        </div>
-    </div>
-
-    <div class="row">
-        <div class="col-md-6">
-            <div class="card-pf">
-                <div class="card-pf-heading">
-                    <h3 class="card-pf-title">{% trans "Top requesters" %}</h3>
-                </div>
-                <div class="card-pf-body">
-                    {% if top_requesters %}
-                    <div class="table-responsive">
-                        <table class="table" aria-label="{% trans 'Top requesters' %}">
-                            <thead><tr><th>{% trans "Requester" %}</th><th>{% trans "Requests created" %}</th></tr></thead>
-                            <tbody>
-                                {% for row in top_requesters %}
-                                <tr>
-                                    <td>{{ row.requester__username }}</td>
-                                    <td>{{ row.request_count }}</td>
-                                </tr>
-                                {% endfor %}
-                            </tbody>
-                        </table>
-                    </div>
-                    {% else %}
-                    <p class="text-muted">{% trans "No review requests yet." %}</p>
                     {% endif %}
                 </div>
             </div>

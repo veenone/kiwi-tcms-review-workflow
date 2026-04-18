@@ -258,24 +258,29 @@ class AllowedStatusesJSON(View):
 @method_decorator(login_required, name="dispatch")
 @method_decorator(permission_required("tcms_review.view_reviewrequest"), name="dispatch")
 class Stats(TemplateView):
-    """Aggregate review statistics across all requests."""
+    """Aggregate review statistics and KPIs across all requests."""
 
     template_name = "tcms_review/stats.html"
 
     def get_context_data(self, **kwargs):
+        import json  # noqa: WPS433
+        from datetime import timedelta  # noqa: WPS433
+
+        from django.db.models import Avg, Count, F, Max, Min  # noqa: WPS433
+        from django.utils import timezone  # noqa: WPS433
+
         ctx = super().get_context_data(**kwargs)
 
         qs = ReviewRequest.objects.all()
         ctx["total_requests"] = qs.count()
-        ctx["by_state"] = {}
+
+        by_state = {}
         for value, label in State.CHOICES:
-            count = qs.filter(state=value).count()
-            ctx["by_state"][label] = count
+            by_state[label] = qs.filter(state=value).count()
+        ctx["by_state"] = by_state
 
         ctx["total_votes"] = ReviewVote.objects.count()
         ctx["total_items"] = ReviewItem.objects.count()
-
-        from django.db.models import Avg, Count, F  # noqa: WPS433
 
         terminal_qs = qs.filter(state__in=list(State.TERMINAL))
         avg_duration = terminal_qs.aggregate(
@@ -283,20 +288,97 @@ class Stats(TemplateView):
         )["avg"]
         ctx["avg_time_to_decision"] = avg_duration
 
-        top_reviewers = (
+        top_reviewers_qs = (
             ReviewVote.objects
             .values("reviewer__username")
             .annotate(vote_count=Count("pk"))
             .order_by("-vote_count")[:10]
         )
-        ctx["top_reviewers"] = list(top_reviewers)
+        top_reviewers = list(top_reviewers_qs)
+        ctx["top_reviewers"] = top_reviewers
 
-        top_requesters = (
+        top_requesters_qs = (
             ReviewRequest.objects
             .values("requester__username")
             .annotate(request_count=Count("pk"))
             .order_by("-request_count")[:10]
         )
-        ctx["top_requesters"] = list(top_requesters)
+        top_requesters = list(top_requesters_qs)
+        ctx["top_requesters"] = top_requesters
+
+        # ── KPIs ──────────────────────────────────────────────────────
+        now = timezone.now()
+        window_30 = now - timedelta(days=30)
+
+        open_qs = qs.filter(state=State.IN_REVIEW)
+        ctx["open_requests"] = open_qs.count()
+        ctx["overdue_requests"] = open_qs.filter(due_date__lt=now).count()
+
+        ctx["requests_last_30d"] = qs.filter(created_at__gte=window_30).count()
+        ctx["closed_last_30d"] = qs.filter(
+            state__in=list(State.TERMINAL), updated_at__gte=window_30,
+        ).count()
+        ctx["votes_last_30d"] = ReviewVote.objects.filter(voted_at__gte=window_30).count()
+
+        approved_count = qs.filter(state=State.APPROVED).count()
+        rejected_count = qs.filter(state=State.REJECTED).count()
+        closed = approved_count + rejected_count
+        ctx["approval_rate"] = (
+            (approved_count * 100.0 / closed) if closed else 0.0
+        )
+
+        # Median time-to-decision (best effort in Python; small volumes)
+        durations = [
+            (r.updated_at - r.created_at).total_seconds()
+            for r in terminal_qs.only("created_at", "updated_at")
+        ]
+        if durations:
+            durations.sort()
+            mid = len(durations) // 2
+            if len(durations) % 2 == 0:
+                median_secs = (durations[mid - 1] + durations[mid]) / 2.0
+            else:
+                median_secs = durations[mid]
+            ctx["median_time_to_decision"] = timedelta(seconds=int(median_secs))
+        else:
+            ctx["median_time_to_decision"] = None
+
+        fastest = terminal_qs.aggregate(
+            m=Min(F("updated_at") - F("created_at"))
+        )["m"]
+        slowest = terminal_qs.aggregate(
+            m=Max(F("updated_at") - F("created_at"))
+        )["m"]
+        ctx["fastest_decision"] = fastest
+        ctx["slowest_decision"] = slowest
+
+        # ── Chart payload (embedded as JSON) ──────────────────────────
+        reviewers_for_chart = [
+            {"name": row["reviewer__username"], "count": row["vote_count"]}
+            for row in top_reviewers
+        ]
+        requesters_for_chart = [
+            {"name": row["requester__username"], "count": row["request_count"]}
+            for row in top_requesters
+        ]
+
+        daily_qs = (
+            qs.filter(created_at__gte=window_30)
+            .extra(select={"d": "date(created_at)"})
+            .values("d")
+            .annotate(count=Count("pk"))
+            .order_by("d")
+        )
+        daily = [
+            {"date": str(row["d"]), "count": row["count"]}
+            for row in daily_qs
+        ]
+
+        ctx["chart_payload_json"] = json.dumps({
+            "by_state": by_state,
+            "top_reviewers": reviewers_for_chart,
+            "top_requesters": requesters_for_chart,
+            "daily": daily,
+        })
 
         return ctx

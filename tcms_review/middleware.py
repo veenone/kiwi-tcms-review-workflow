@@ -21,9 +21,14 @@ class InjectReviewBundleMiddleware:
         # have been fully loaded.
         from django.templatetags.static import static  # noqa: WPS433
 
+        from tcms_review import __version__  # noqa: WPS433
+
         url = static("tcms_review/js/inject.js")
+        # Append plugin version as a cache-buster. Changes on every release
+        # so browsers pick up updated JS without a hard refresh.
+        versioned = f"{url}?v={__version__}"
         self.script_tag = (
-            f'<script src="{url}" defer data-source="tcms_review"></script>'
+            f'<script src="{versioned}" defer data-source="tcms_review"></script>'
         ).encode("utf-8")
 
     def __call__(self, request):
