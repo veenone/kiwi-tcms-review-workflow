@@ -249,6 +249,33 @@ def filter_votes(query=None):
 
 
 @permissions_required("tcms_review.change_reviewrequest")
+@rpc_method(name="ReviewItem.resubmit")
+def resubmit_item(item_id):
+    """Resubmit a case that was marked needs_changes or rejected back
+    for re-review. Resets the per-case decision to pending, which in
+    turn triggers the configured status transition (e.g.
+    NEED_UPDATE → PROPOSED) on the linked TestCase."""
+    from tcms_review.state_machine import VoteDecision  # noqa: WPS433
+
+    item = ReviewItem.objects.select_related("review_request").get(pk=item_id)
+    review_request = item.review_request
+
+    if review_request.is_locked:
+        raise PermissionDenied("This review request is approved and can no longer be modified.")
+    if review_request.state == State.CANCELLED:
+        raise PermissionDenied("This review request has been cancelled and cannot be reopened.")
+    if item.decision not in (VoteDecision.NEEDS_CHANGES, VoteDecision.REJECTED):
+        raise ValueError(
+            "Only cases marked 'Needs changes' or 'Rejected' can be resubmitted for re-review."
+        )
+
+    item.decision = ReviewItem.PENDING
+    item.comment = ""
+    item.save(update_fields=["decision", "comment", "updated_at"])
+    return _serialize_item(item)
+
+
+@permissions_required("tcms_review.change_reviewrequest")
 @rpc_method(name="ReviewItem.set_decision")
 def set_item_decision(item_id, decision, comment=""):
     valid = {choice for choice, _ in ReviewItem.DECISION_CHOICES}

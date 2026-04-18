@@ -52,6 +52,16 @@ class ReviewConfig(AppConfig):
             sender=ReviewItem,
             dispatch_uid="tcms_review.status_transition",
         )
+        pre_save.connect(
+            review_signals.cache_previous_item_decision,
+            sender=ReviewItem,
+            dispatch_uid="tcms_review.cache_previous_item_decision",
+        )
+        post_save.connect(
+            review_signals.handle_email_item_resubmitted,
+            sender=ReviewItem,
+            dispatch_uid="tcms_review.email_item_resubmitted",
+        )
 
     @staticmethod
     def _register_rpc_methods():

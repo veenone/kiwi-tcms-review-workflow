@@ -37,10 +37,14 @@ DEFAULT_ALLOWED_CASE_STATUSES = ["PROPOSED"]
 
 DEFAULT_STATUS_TRANSITIONS = [
     # (source_case_status, review_decision, target_case_status)
-    ("PROPOSED",  "approved",      "CONFIRMED"),
-    ("PROPOSED",  "needs_changes", "NEED_UPDATE"),
-    ("PROPOSED",  "rejected",      "DISABLED"),
-    ("CONFIRMED", "needs_changes", "NEED_UPDATE"),
+    ("PROPOSED",    "approved",      "CONFIRMED"),
+    ("PROPOSED",    "needs_changes", "NEED_UPDATE"),
+    ("PROPOSED",    "rejected",      "DISABLED"),
+    ("CONFIRMED",   "needs_changes", "NEED_UPDATE"),
+    # Re-review loop: resubmitting a case moves it back to PROPOSED so
+    # the allowed-status filter picks it up again.
+    ("NEED_UPDATE", "pending",       "PROPOSED"),
+    ("DISABLED",    "pending",       "PROPOSED"),
 ]
 
 

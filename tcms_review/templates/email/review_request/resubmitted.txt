@@ -1,0 +1,6 @@
+{% load i18n %}{% blocktrans with case_id=item.case_id pk=review_request.pk title=review_request.title previous=previous_decision %}Case #{{ case_id }} has been updated and resubmitted for re-review in Review Request #{{ pk }} ({{ title }}).
+
+Previous decision on this case: "{{ previous }}"
+Current decision: "pending" — awaiting your re-review.{% endblocktrans %}
+
+{% blocktrans %}Open the request to re-decide this case and, once every case is finalized, update your overall vote:{% endblocktrans %} {{ absolute_url }}

@@ -135,6 +135,63 @@ def handle_emails_post_review_vote_save(sender, instance, created, **kwargs):
         instance.review_request.recalculate_state()
 
 
+_PRE_SAVE_ITEM_DECISION_ATTR = "_tcms_review_previous_item_decision"
+
+
+def cache_previous_item_decision(sender, instance, **kwargs):
+    """Stash the prior ReviewItem.decision so post_save can detect the
+    transition from {needs_changes, rejected} -> pending (resubmit)."""
+    if instance.pk:
+        previous = (
+            sender.objects
+            .filter(pk=instance.pk)
+            .values_list("decision", flat=True)
+            .first()
+        )
+        setattr(instance, _PRE_SAVE_ITEM_DECISION_ATTR, previous)
+    else:
+        setattr(instance, _PRE_SAVE_ITEM_DECISION_ATTR, None)
+
+
+def handle_email_item_resubmitted(sender, instance, created, **kwargs):
+    """When a ReviewItem.decision transitions from needs_changes or
+    rejected back to pending, email every assigned reviewer so they
+    know the tester has updated the case and wants another look."""
+    if kwargs.get("raw"):
+        return
+    if created:
+        return
+
+    previous = getattr(instance, _PRE_SAVE_ITEM_DECISION_ATTR, None)
+    if previous not in ("needs_changes", "rejected"):
+        return
+    if instance.decision != "pending":
+        return
+
+    review_request = instance.review_request
+    recipients = [
+        email for email in review_request.reviewers.values_list("email", flat=True)
+        if email
+    ]
+    if not recipients:
+        return
+
+    _mailto(
+        template_name="email/review_request/resubmitted.txt",
+        subject=str(_("Re-review requested: Case #%(case_id)d in Review Request #%(pk)d")) % {
+            "case_id": instance.case_id,
+            "pk": review_request.pk,
+        },
+        recipients=recipients,
+        context={
+            "review_request": review_request,
+            "item": instance,
+            "previous_decision": previous,
+            "absolute_url": _absolute_url(review_request),
+        },
+    )
+
+
 def handle_testcase_status_transition(sender, instance, created, **kwargs):
     """Apply REVIEW_STATUS_TRANSITIONS when a ReviewItem decision changes.
 

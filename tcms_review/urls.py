@@ -11,6 +11,7 @@ urlpatterns = [
     re_path(r"^(?P<pk>\d+)/vote/$", views.Vote.as_view(), name="review-vote"),
     re_path(r"^(?P<pk>\d+)/report/$", views.Report.as_view(), name="review-report"),
     re_path(r"^item/(?P<pk>\d+)/decision/$", views.ItemDecision.as_view(), name="review-item-decision"),
+    re_path(r"^item/(?P<pk>\d+)/resubmit/$", views.ResubmitItem.as_view(), name="review-item-resubmit"),
     re_path(r"^search/$", views.Search.as_view(), name="review-search"),
     re_path(r"^stats/$", views.Stats.as_view(), name="review-stats"),
     # JSON endpoints consumed by inject.js (dashboard widget, per-case badge, config)

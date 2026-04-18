@@ -17,7 +17,7 @@ from tcms_review import reports
 from tcms_review.conf import get_allowed_case_statuses
 from tcms_review.forms import NewReviewRequestForm, VoteForm
 from tcms_review.models import ReviewItem, ReviewRequest, ReviewVote
-from tcms_review.state_machine import State
+from tcms_review.state_machine import State, VoteDecision
 
 _PENDING_LIMIT = 10
 
@@ -165,6 +165,34 @@ class Vote(View):
                 "comment": form.cleaned_data.get("comment", ""),
             },
         )
+        return HttpResponseRedirect(review_request.get_absolute_url())
+
+
+@method_decorator(login_required, name="dispatch")
+@method_decorator(permission_required("tcms_review.change_reviewrequest"), name="dispatch")
+class ResubmitItem(View):
+    """Tester-driven resubmission of a case that was previously marked
+    needs_changes or rejected. Resets the item's decision to pending,
+    which — via the existing status-transition signal — also flips the
+    TestCase status back to PROPOSED (if the NEED_UPDATE/DISABLED rule
+    is configured)."""
+
+    def post(self, request, pk):
+        item = get_object_or_404(ReviewItem.objects.select_related("review_request"), pk=pk)
+        review_request = item.review_request
+
+        if review_request.is_locked:
+            raise PermissionDenied("This review request is approved and can no longer be modified.")
+        if review_request.state == State.CANCELLED:
+            raise PermissionDenied("This review request has been cancelled and cannot be reopened.")
+        if item.decision not in (VoteDecision.NEEDS_CHANGES, VoteDecision.REJECTED):
+            raise PermissionDenied(
+                "Only cases marked 'Needs changes' or 'Rejected' can be resubmitted for re-review."
+            )
+
+        item.decision = ReviewItem.PENDING
+        item.comment = ""
+        item.save(update_fields=["decision", "comment", "updated_at"])
         return HttpResponseRedirect(review_request.get_absolute_url())
 
 

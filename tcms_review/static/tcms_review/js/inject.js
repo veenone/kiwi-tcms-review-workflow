@@ -128,6 +128,26 @@
                     hint: ""
                 };
             }
+        },
+        {
+            match: /Only cases marked 'Needs changes' or 'Rejected' can be resubmitted/i,
+            build: function () {
+                return {
+                    title: "That case doesn't need re-review",
+                    body: "Only cases that were marked 'Needs changes' or 'Rejected' by a reviewer can be resubmitted.",
+                    hint: "If you want to update a case that's pending or already approved, ask a reviewer to mark it 'Needs changes' first."
+                };
+            }
+        },
+        {
+            match: /cancelled and cannot be reopened/i,
+            build: function () {
+                return {
+                    title: "This review request has been cancelled",
+                    body: "Cancelled review requests cannot be reopened.",
+                    hint: "Start a new review request for the updated case."
+                };
+            }
         }
     ];
 

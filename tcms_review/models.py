@@ -179,6 +179,7 @@ class ReviewStatusTransition(models.Model):
         ("approved", "Approved"),
         ("needs_changes", "Needs changes"),
         ("rejected", "Rejected"),
+        ("pending", "Pending (resubmit)"),
     ]
 
     source_status = models.CharField(

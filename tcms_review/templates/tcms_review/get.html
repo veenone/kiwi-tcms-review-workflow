@@ -231,7 +231,7 @@
                                 {% if is_locked %}
                                 <span class="text-muted">{% trans "Locked" %}</span>
                                 {% else %}
-                                <form method="post" action="{% url 'review-item-decision' item.pk %}" class="form-inline">
+                                <form method="post" action="{% url 'review-item-decision' item.pk %}" class="form-inline" style="display:inline-block;">
                                     {% csrf_token %}
                                     <button name="decision" value="approved" class="btn btn-xs btn-success"
                                             aria-label="{% trans 'Approve case' %}">
@@ -246,6 +246,18 @@
                                         <i class="pficon pficon-error-circle-o" aria-hidden="true"></i>
                                     </button>
                                 </form>
+                                {% if item.decision == "needs_changes" or item.decision == "rejected" %}
+                                <form method="post" action="{% url 'review-item-resubmit' item.pk %}" class="form-inline" style="display:inline-block; margin-left:4px;"
+                                      data-confirm="{% trans 'Resubmit this case for re-review? The reviewer will be notified and the case status will be reset.' %}">
+                                    {% csrf_token %}
+                                    <button type="submit" class="btn btn-xs btn-info"
+                                            aria-label="{% trans 'Resubmit case for re-review' %}"
+                                            title="{% trans 'Resubmit for re-review' %}">
+                                        <i class="fa fa-refresh" aria-hidden="true"></i>
+                                        {% trans "Resubmit" %}
+                                    </button>
+                                </form>
+                                {% endif %}
                                 {% endif %}
                             </td>
                         </tr>
