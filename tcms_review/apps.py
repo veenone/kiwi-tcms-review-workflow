@@ -42,6 +42,21 @@ class ReviewConfig(AppConfig):
             sender=ReviewRequest,
             dispatch_uid="tcms_review.wiki_sync_post_request_save",
         )
+        post_save.connect(
+            review_signals.handle_wiki_sync_post_review_item_save,
+            sender=ReviewItem,
+            dispatch_uid="tcms_review.wiki_sync_post_item_save",
+        )
+        pre_save.connect(
+            review_signals.cache_previous_vote_decision,
+            sender=ReviewVote,
+            dispatch_uid="tcms_review.cache_previous_vote_decision",
+        )
+        post_save.connect(
+            review_signals.handle_wiki_sync_post_review_vote_save,
+            sender=ReviewVote,
+            dispatch_uid="tcms_review.wiki_sync_post_vote_save",
+        )
         m2m_changed.connect(
             review_signals.handle_reviewers_changed,
             sender=ReviewRequest.reviewers.through,

@@ -314,19 +314,136 @@ def _do_wiki_update(review_request, previous_state, event="state_changed"):
 def handle_wiki_sync_post_review_request_save(
     sender, instance, created, **kwargs,
 ):
-    """Fire-and-forget wiki sync on ReviewRequest save.
+    """Fire-and-forget wiki sync on ReviewRequest save — state changes only.
 
-    Read from the WikiIntegrationConfig singleton. Skips quietly when
-    disabled, when credentials are missing, or when the external call
-    fails — a broken wiki must never block the review workflow.
+    The initial page create is triggered by the first ReviewItem save via
+    handle_wiki_sync_post_review_item_save, because `ReviewRequest.save()`
+    fires before `form.save_m2m()` has populated the reviewers M2M and
+    before any ReviewItem rows exist. Creating the page later lets the
+    initial body include both reviewers and attached cases.
     """
     if kwargs.get("raw"):
         return
 
     if created:
-        _fire_wiki_sync(_do_wiki_create, instance)
         return
 
     previous_state = getattr(instance, _PRE_SAVE_STATE_ATTR, None)
     if previous_state and previous_state != instance.state:
         _fire_wiki_sync(_do_wiki_update, instance, previous_state)
+
+
+# ─── Wiki sync — per-item and per-vote events ─────────────────────────
+
+
+_PRE_SAVE_VOTE_DECISION_ATTR = "_tcms_review_previous_vote_decision"
+
+
+def cache_previous_vote_decision(sender, instance, **kwargs):
+    """Stash the prior ReviewVote.decision so post_save can diff."""
+    if instance.pk:
+        previous = (
+            sender.objects
+            .filter(pk=instance.pk)
+            .values_list("decision", flat=True)
+            .first()
+        )
+        setattr(instance, _PRE_SAVE_VOTE_DECISION_ATTR, previous)
+    else:
+        setattr(instance, _PRE_SAVE_VOTE_DECISION_ATTR, None)
+
+
+def _do_wiki_append_item_decision(review_request, item, previous_decision, actor):
+    from tcms_review.integrations.wiki.adapters import get_adapter, WikiSyncError  # noqa: WPS433
+    from tcms_review.integrations.wiki import builder  # noqa: WPS433
+    from tcms_review.models import WikiIntegrationConfig  # noqa: WPS433
+    from tcms_review.models import ReviewRequest  # noqa: WPS433
+
+    config = WikiIntegrationConfig.objects.first()
+    if not config:
+        return
+    adapter = get_adapter(config)
+    if adapter is None:
+        return
+
+    # Lazy create: if the request has no wiki page yet AND auto_create
+    # is on, do the full initial page build now — by now the reviewer
+    # M2M is populated and at least one ReviewItem exists, so the body
+    # shows the real state instead of "No cases yet".
+    if not review_request.wiki_page_id:
+        if not config.auto_create:
+            return
+        # Refetch to pick up any M2M that landed after the save
+        review_request = ReviewRequest.objects.get(pk=review_request.pk)
+        title = builder.build_title(review_request)
+        body_md = builder.build_create_body(review_request)
+        page_id = adapter.create_page(title=title, body_md=body_md)
+        ReviewRequest.objects.filter(pk=review_request.pk).update(
+            wiki_page_id=page_id,
+        )
+        # The initial body already reflects the freshly-added item, so
+        # skip the per-item append to avoid double-logging the first save.
+        return
+
+    if not config.auto_update:
+        return
+
+    body = builder.build_item_decision_body(item, previous_decision, actor=actor)
+    adapter.update_page(review_request.wiki_page_id, body, append=True)
+
+
+def _do_wiki_append_vote_cast(review_request, vote, previous_decision, actor):
+    from tcms_review.integrations.wiki.adapters import get_adapter, WikiSyncError  # noqa: WPS433
+    from tcms_review.integrations.wiki import builder  # noqa: WPS433
+    from tcms_review.models import WikiIntegrationConfig  # noqa: WPS433
+
+    if not review_request.wiki_page_id:
+        return
+    config = WikiIntegrationConfig.objects.first()
+    if not config or not config.auto_update:
+        return
+    adapter = get_adapter(config)
+    if adapter is None:
+        return
+
+    body = builder.build_vote_cast_body(vote, previous_decision, actor=actor)
+    adapter.update_page(review_request.wiki_page_id, body, append=True)
+
+
+def handle_wiki_sync_post_review_item_save(sender, instance, created, **kwargs):
+    """Append a per-case decision entry to the wiki page whenever a
+    ReviewItem is created or its decision changes."""
+    if kwargs.get("raw"):
+        return
+
+    previous = getattr(instance, _PRE_SAVE_ITEM_DECISION_ATTR, None)
+    # Skip no-op saves (e.g. bumping updated_at without changing decision)
+    if not created and previous == instance.decision and not instance.comment:
+        return
+
+    actor = (
+        instance.case.author.username
+        if instance.case_id and instance.case and instance.case.author_id
+        else "system"
+    )
+    _fire_wiki_sync(
+        _do_wiki_append_item_decision,
+        instance.review_request, instance, previous, actor,
+    )
+
+
+def handle_wiki_sync_post_review_vote_save(sender, instance, created, **kwargs):
+    """Append a per-reviewer vote entry to the wiki page whenever a vote
+    is cast or revised."""
+    if kwargs.get("raw"):
+        return
+
+    previous = getattr(instance, _PRE_SAVE_VOTE_DECISION_ATTR, None)
+    if not created and previous == instance.decision and not instance.comment:
+        return
+
+    actor = instance.reviewer.username if instance.reviewer_id else "system"
+    _fire_wiki_sync(
+        _do_wiki_append_vote_cast,
+        instance.review_request, instance, previous, actor,
+    )

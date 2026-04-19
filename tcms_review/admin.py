@@ -102,10 +102,17 @@ class WikiIntegrationConfigAdmin(SimpleHistoryAdmin):
             "fields": ("backend", "base_url", "api_token", "auth_email", "collection_id"),
             "description": (
                 "<b>Backend:</b> pick the wiki you're syncing to. Set to "
-                "<i>Disabled</i> to turn the integration off.<br>"
-                "<b>Outline:</b> fill in Base URL + API token + Collection ID.<br>"
-                "<b>Confluence:</b> fill in Base URL + API token + Auth email + Space Key "
-                "(use the Space Key in the Collection ID field)."
+                "<i>Disabled</i> to turn the integration off.<br><br>"
+                "<b>Outline:</b> Base URL (e.g. <code>https://outline.example.com</code>) + "
+                "API token + Collection ID or URL slug. Leave Auth email empty.<br><br>"
+                "<b>Confluence Cloud:</b> Base URL "
+                "(<code>https://your-org.atlassian.net/wiki</code>) + Atlassian API token + "
+                "the email that owns the token + the Space Key (pasted into Collection ID).<br><br>"
+                "<b>Confluence Data Center:</b> Base URL "
+                "(<code>https://confluence.example.com</code>) + Space Key.<br>"
+                "&nbsp;&nbsp;• <i>PAT auth (recommended):</i> paste a Personal Access Token "
+                "into API token and leave Auth email empty.<br>"
+                "&nbsp;&nbsp;• <i>Basic auth:</i> username in Auth email, password/PAT in API token."
             ),
         }),
         ("Sync behavior", {

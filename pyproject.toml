@@ -1,6 +1,6 @@
 [project]
 name = "kiwitcms-review"
-version = "0.7.0"
+version = "0.7.1"
 description = "Test case review workflow plugin for Kiwi TCMS: group test cases into review requests, assign reviewers, collect votes, and track KPIs."
 readme = "README.md"
 license = "GPL-2.0-or-later"
@@ -12,6 +12,7 @@ dependencies = [
     "python-docx>=1.1",
     "reportlab>=4.0",
     "requests>=2.28",
+    "markdown>=3.0",
 ]
 authors = [{ name = "Achmad Fienan Rahardianto", email = "veenone@gmail.com" }]
 classifiers = [

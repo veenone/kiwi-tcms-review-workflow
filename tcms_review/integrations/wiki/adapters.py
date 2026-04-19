@@ -132,27 +132,85 @@ class OutlineAdapter:
         )
 
 
+def _markdown_to_confluence_html(body_md: str) -> str:
+    """Render markdown as XHTML suitable for Confluence 'storage' format.
+
+    Confluence's wiki representation is NOT markdown — it uses its own
+    syntax (`h1.`, `*`, etc). Safer to convert to HTML server-side and
+    send as `storage`, which Confluence accepts on both Cloud and DC.
+
+    Uses the `markdown` package if available (pulled in by Kiwi TCMS
+    itself). Falls back to a minimal wrap if not."""
+    try:
+        import markdown  # noqa: WPS433
+    except ImportError:
+        # Escape and preserve line breaks so the page at least shows
+        # readable content instead of raw syntax characters.
+        from html import escape  # noqa: WPS433
+        return "<pre>" + escape(body_md) + "</pre>"
+
+    return markdown.markdown(
+        body_md,
+        extensions=["extra", "tables", "fenced_code"],
+        output_format="html",
+    )
+
+
 class ConfluenceAdapter:
-    """Uses Confluence Cloud REST API v2. Auth: email + API token (basic)."""
+    """Confluence REST client that works for both Cloud and Data Center.
+
+    Uses the v1 REST API (`/rest/api/content/*`) which is available on
+    every supported Confluence flavour. The v2 API (`/wiki/api/v2/*`)
+    is Cloud-only and would block Data Center customers.
+
+    Authentication auto-detection:
+    - If `auth_email` is set → HTTP Basic with (auth_email, api_token).
+      This covers Atlassian Cloud (email + API token) and DC instances
+      that accept basic auth with username + PAT.
+    - If `auth_email` is empty → `Authorization: Bearer <api_token>`.
+      This is the DC Personal Access Token flow.
+
+    Base URL examples:
+    - Cloud: `https://your-org.atlassian.net/wiki`
+    - DC:    `https://confluence.example.com`
+
+    Body: we render markdown to HTML and send as `representation: storage`
+    (Confluence XHTML). This renders cleanly on both flavours without
+    depending on the fragile `wiki` representation.
+    """
 
     def __init__(
         self, base_url: str, api_token: str, auth_email: str, space_key: str,
     ):
         self.base_url = base_url.rstrip("/")
         self.api_token = api_token
-        self.auth_email = auth_email
+        self.auth_email = (auth_email or "").strip()
         self.space_key = space_key
         self.timeout = 10
 
+    def _api_path(self, suffix: str) -> str:
+        """Compose `/rest/api/{suffix}` or `/wiki/rest/api/{suffix}` depending
+        on whether the base URL already ends in `/wiki`."""
+        if self.base_url.endswith("/wiki"):
+            return f"/rest/api/{suffix.lstrip('/')}"
+        # DC or Cloud URL without the /wiki suffix
+        return f"/rest/api/{suffix.lstrip('/')}"
+
     def _request(self, method: str, path: str, payload: Optional[dict] = None) -> dict:
         import requests  # noqa: WPS433
-        from requests.auth import HTTPBasicAuth  # noqa: WPS433
 
         url = f"{self.base_url}{path}"
-        auth = HTTPBasicAuth(self.auth_email, self.api_token)
         headers = {"Accept": "application/json"}
         if payload is not None:
             headers["Content-Type"] = "application/json"
+
+        auth = None
+        if self.auth_email:
+            from requests.auth import HTTPBasicAuth  # noqa: WPS433
+            auth = HTTPBasicAuth(self.auth_email, self.api_token)
+        else:
+            # DC Personal Access Token flow
+            headers["Authorization"] = f"Bearer {self.api_token}"
 
         try:
             response = requests.request(
@@ -166,7 +224,7 @@ class ConfluenceAdapter:
         if response.status_code >= 400:
             raise WikiSyncError(
                 f"Confluence {path}: HTTP {response.status_code} — "
-                f"{response.text[:200]}"
+                f"{response.text[:250]}"
             )
         if not response.text:
             return {}
@@ -175,50 +233,70 @@ class ConfluenceAdapter:
         except ValueError as exc:
             raise WikiSyncError(f"Confluence {path}: invalid JSON: {exc}") from exc
 
-    def _resolve_space_id(self) -> str:
-        body = self._request("GET", f"/wiki/api/v2/spaces?keys={self.space_key}")
-        results = body.get("results") or []
-        if not results:
-            raise WikiSyncError(f"Confluence space not found: {self.space_key}")
-        return results[0]["id"]
-
     def test_connection(self) -> Optional[str]:
-        body = self._request("GET", f"/wiki/api/v2/spaces?keys={self.space_key}")
-        results = body.get("results") or []
-        if not results:
-            raise WikiSyncError(f"Space '{self.space_key}' not found or inaccessible")
-        return results[0].get("name")
+        """Probe /rest/api/space/{KEY} — identical response shape on
+        Cloud and Data Center. Returns the space name."""
+        body = self._request(
+            "GET", self._api_path(f"space/{self.space_key}?expand=description"),
+        )
+        name = body.get("name")
+        if not name:
+            raise WikiSyncError(
+                f"Space '{self.space_key}' not found or inaccessible"
+            )
+        return name
 
     def create_page(self, title: str, body_md: str) -> str:
-        space_id = self._resolve_space_id()
-        body = self._request("POST", "/wiki/api/v2/pages", {
-            "spaceId": space_id,
-            "status": "current",
+        html_body = _markdown_to_confluence_html(body_md)
+        body = self._request("POST", self._api_path("content"), {
+            "type": "page",
             "title": title,
-            "body": {"representation": "wiki", "value": body_md},
+            "space": {"key": self.space_key},
+            "body": {
+                "storage": {
+                    "value": html_body,
+                    "representation": "storage",
+                },
+            },
         })
         page_id = body.get("id")
         if not page_id:
-            raise WikiSyncError("Confluence /pages create returned no id")
+            raise WikiSyncError("Confluence POST /content returned no id")
         return str(page_id)
 
     def update_page(self, page_id: str, body_md: str, append: bool = False) -> None:
-        # v2 requires the current version number for updates; fetch it first.
-        head = self._request("GET", f"/wiki/api/v2/pages/{page_id}")
+        # v1 requires the current version number for updates; fetch first.
+        head = self._request(
+            "GET",
+            self._api_path(f"content/{page_id}?expand=body.storage,version"),
+        )
         version = (head.get("version") or {}).get("number", 1)
         title = head.get("title", "Review")
-        if append:
-            existing_body = (
-                (head.get("body") or {}).get("storage", {}).get("value", "")
-            )
-            body_md = existing_body + "\n\n" + body_md
 
-        self._request("PUT", f"/wiki/api/v2/pages/{page_id}", {
+        new_html = _markdown_to_confluence_html(body_md)
+        if append:
+            existing_html = (
+                ((head.get("body") or {}).get("storage") or {}).get("value", "")
+            )
+            merged_html = existing_html + "\n" + new_html
+        else:
+            merged_html = new_html
+
+        self._request("PUT", self._api_path(f"content/{page_id}"), {
             "id": page_id,
-            "status": "current",
+            "type": "page",
             "title": title,
-            "body": {"representation": "wiki", "value": body_md},
-            "version": {"number": version + 1, "message": "kiwitcms-review sync"},
+            "space": {"key": self.space_key},
+            "body": {
+                "storage": {
+                    "value": merged_html,
+                    "representation": "storage",
+                },
+            },
+            "version": {
+                "number": version + 1,
+                "message": "kiwitcms-review sync",
+            },
         })
 
     def close_page(self, page_id: str) -> None:
