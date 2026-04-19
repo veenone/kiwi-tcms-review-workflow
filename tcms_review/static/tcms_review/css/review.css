@@ -98,10 +98,50 @@
     margin-left: 0;
 }
 
-.label[role="status"] {
+/* User typeahead picker — anchor the popup to the input, not the modal. */
+.review-user-picker {
+    position: relative;
+}
+
+.review-user-picker .review-user-results {
+    position: absolute;
+    top: 100%;
+    left: 0;
+    right: 0;
+    width: 100%;
+    margin-top: 2px;
+    max-height: 240px;
+    overflow-y: auto;
+    z-index: 1060;
+}
+
+.review-user-picker .review-user-results > li > a {
+    display: block;
+    padding: 6px 12px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.review-user-tags .label {
+    display: inline-block;
+    margin-right: 4px;
+    margin-bottom: 4px;
+}
+
+/* Pill-style state and decision badges — override the default Bootstrap
+   square labels used by {% state_badge %} and {% decision_badge %}. */
+.label[role="status"],
+.review-cases-table .label,
+.review-activity-thread .label,
+.review-activity-thread-meta .label,
+.review-pending-card .label {
     font-size: 12px;
-    padding: 4px 8px;
+    padding: 3px 10px;
     line-height: 1.4;
+    border-radius: 10em;
+    font-weight: 500;
+    letter-spacing: 0.02em;
 }
 
 @media (max-width: 767px) {

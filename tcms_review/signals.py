@@ -231,3 +231,102 @@ def handle_testcase_status_transition(sender, instance, created, **kwargs):
 
     case.case_status = target_status
     case.save(update_fields=["case_status"])
+
+
+# ─── Wiki sync ────────────────────────────────────────────────────────
+
+
+def _fire_wiki_sync(fn, *args, **kwargs):
+    """Run a wiki call in a daemon thread so the HTTP round-trip never
+    blocks the request cycle. Mirrors the pattern Kiwi uses for mailto."""
+    import threading  # noqa: WPS433
+
+    def _runner():
+        try:
+            fn(*args, **kwargs)
+        except Exception:  # noqa: BLE001 — log everything, never bubble
+            import logging  # noqa: WPS433
+            logging.getLogger("tcms_review.wiki").exception(
+                "Wiki sync failed for %s", fn.__name__,
+            )
+
+    threading.Thread(target=_runner, daemon=True).start()
+
+
+def _do_wiki_create(review_request):
+    from tcms_review.integrations.wiki.adapters import get_adapter, WikiSyncError  # noqa: WPS433
+    from tcms_review.integrations.wiki import builder  # noqa: WPS433
+    from tcms_review.models import WikiIntegrationConfig  # noqa: WPS433
+
+    config = WikiIntegrationConfig.objects.first()
+    if not config or not config.auto_create:
+        return
+    adapter = get_adapter(config)
+    if adapter is None:
+        return
+
+    try:
+        page_id = adapter.create_page(
+            title=builder.build_title(review_request),
+            body_md=builder.build_create_body(review_request),
+        )
+    except WikiSyncError:
+        raise
+    # Persist the id without re-triggering post_save signals.
+    from tcms_review.models import ReviewRequest  # noqa: WPS433
+    ReviewRequest.objects.filter(pk=review_request.pk).update(wiki_page_id=page_id)
+
+
+def _do_wiki_update(review_request, previous_state, event="state_changed"):
+    from tcms_review.integrations.wiki.adapters import get_adapter, WikiSyncError  # noqa: WPS433
+    from tcms_review.integrations.wiki import builder  # noqa: WPS433
+    from tcms_review.models import WikiIntegrationConfig  # noqa: WPS433
+
+    if not review_request.wiki_page_id:
+        return
+    config = WikiIntegrationConfig.objects.first()
+    if not config or not config.auto_update:
+        return
+    adapter = get_adapter(config)
+    if adapter is None:
+        return
+
+    body = builder.build_update_body(
+        review_request,
+        previous_state=previous_state,
+        event=event,
+        actor=(review_request.requester.username if review_request.requester else "system"),
+    )
+    try:
+        adapter.update_page(review_request.wiki_page_id, body, append=True)
+    except WikiSyncError:
+        raise
+
+    # Optional: close marker on terminal state.
+    from tcms_review.state_machine import State  # noqa: WPS433
+    if config.auto_close_marker and review_request.state in State.TERMINAL:
+        try:
+            adapter.close_page(review_request.wiki_page_id)
+        except WikiSyncError:
+            raise
+
+
+def handle_wiki_sync_post_review_request_save(
+    sender, instance, created, **kwargs,
+):
+    """Fire-and-forget wiki sync on ReviewRequest save.
+
+    Read from the WikiIntegrationConfig singleton. Skips quietly when
+    disabled, when credentials are missing, or when the external call
+    fails — a broken wiki must never block the review workflow.
+    """
+    if kwargs.get("raw"):
+        return
+
+    if created:
+        _fire_wiki_sync(_do_wiki_create, instance)
+        return
+
+    previous_state = getattr(instance, _PRE_SAVE_STATE_ATTR, None)
+    if previous_state and previous_state != instance.state:
+        _fire_wiki_sync(_do_wiki_update, instance, previous_state)

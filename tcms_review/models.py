@@ -33,6 +33,10 @@ class ReviewRequest(models.Model):
     )
     created_at = models.DateTimeField(auto_now_add=True, db_index=True)
     updated_at = models.DateTimeField(auto_now=True)
+    # External wiki page identifier — URL/slug for Outline, pageId for
+    # Confluence. Populated by the wiki-sync signal handler; empty when
+    # integration is disabled or the create call hasn't succeeded yet.
+    wiki_page_id = models.CharField(max_length=128, blank=True, default="")
 
     history = HistoricalRecords()
 
@@ -228,3 +232,85 @@ class ReviewVote(models.Model):
 
     class Meta:
         unique_together = [("review_request", "reviewer")]
+
+
+class WikiIntegrationConfig(models.Model):
+    """Singleton — holds credentials and preferences for syncing reviews
+    to an external wiki (Outline or Confluence). Editable from the
+    Django admin at /admin/tcms_review/wikiintegrationconfig/."""
+
+    SINGLETON_PK = 1
+
+    BACKEND_DISABLED = "disabled"
+    BACKEND_OUTLINE = "outline"
+    BACKEND_CONFLUENCE = "confluence"
+    BACKEND_CHOICES = [
+        (BACKEND_DISABLED, "Disabled"),
+        (BACKEND_OUTLINE, "Outline"),
+        (BACKEND_CONFLUENCE, "Confluence"),
+    ]
+
+    backend = models.CharField(
+        max_length=16,
+        choices=BACKEND_CHOICES,
+        default=BACKEND_DISABLED,
+        help_text="Which wiki to sync reviews to. 'Disabled' skips sync entirely.",
+    )
+    base_url = models.URLField(
+        blank=True,
+        help_text="Wiki base URL, e.g. https://outline.example.com or "
+                  "https://example.atlassian.net/wiki",
+    )
+    api_token = models.CharField(
+        max_length=255,
+        blank=True,
+        help_text="API token (Outline: 'ol_api_...'; Confluence: an "
+                  "atlassian.com API token paired with the email below).",
+    )
+    auth_email = models.EmailField(
+        blank=True,
+        help_text="Confluence only — the email address that owns the API token.",
+    )
+    collection_id = models.CharField(
+        max_length=128,
+        blank=True,
+        help_text="Outline collection UUID or Confluence space key where "
+                  "review pages are created.",
+    )
+    auto_create = models.BooleanField(
+        default=True,
+        help_text="Create a wiki page when a ReviewRequest is first saved.",
+    )
+    auto_update = models.BooleanField(
+        default=True,
+        help_text="Append a changelog entry on every state change.",
+    )
+    auto_close_marker = models.BooleanField(
+        default=True,
+        help_text="Mark the page as 'Approved' / 'Closed' when the review "
+                  "reaches a terminal state.",
+    )
+    updated_at = models.DateTimeField(auto_now=True)
+
+    history = HistoricalRecords(excluded_fields=["api_token"])
+
+    class Meta:
+        verbose_name = "Wiki integration configuration"
+        verbose_name_plural = "Wiki integration configuration"
+
+    def __str__(self):
+        return f"Wiki integration — {self.get_backend_display()}"
+
+    def save(self, *args, **kwargs):
+        # Enforce singleton — always write the same pk
+        self.pk = self.SINGLETON_PK
+        super().save(*args, **kwargs)
+
+    @classmethod
+    def get(cls):
+        obj, _ = cls.objects.get_or_create(pk=cls.SINGLETON_PK)
+        return obj
+
+    @property
+    def is_enabled(self):
+        return self.backend != self.BACKEND_DISABLED and bool(self.base_url)

@@ -1,0 +1,201 @@
+{% extends "base.html" %}
+{% load i18n static review_extras %}
+
+{% block head %}
+    <link rel="stylesheet" href="{% review_static 'tcms_review/css/review.css' %}">
+{% endblock %}
+
+{% block title %}{% trans "Consolidated review reports" %}{% endblock %}
+{% block page_id %}page-review-report-hub{% endblock %}
+
+{% block contents %}
+<div class="container-fluid container-cards-pf">
+
+    <ol class="breadcrumb">
+        <li><a href="{% url 'core-views-index' %}">{% trans "Dashboard" %}</a></li>
+        <li><a href="{% url 'review-list' %}">{% trans "Review requests" %}</a></li>
+        <li class="active">{% trans "Consolidated reports" %}</li>
+    </ol>
+
+    <div class="card-pf">
+        <div class="card-pf-heading">
+            <h2 class="card-pf-title">
+                <i class="fa fa-file-text-o" aria-hidden="true"></i>
+                {% trans "Consolidated review reports" %}
+            </h2>
+            <p class="card-pf-subtitle">
+                {% trans "Generate a DOCX or PDF report covering every review request tied to a product, test plan, or test run." %}
+            </p>
+        </div>
+
+        <div class="card-pf-body">
+
+            <ul class="nav nav-tabs" role="tablist" style="margin-bottom:16px;">
+                <li role="presentation" class="{% if scope == 'product' %}active{% endif %}">
+                    <a href="#tab-product" data-toggle="tab" role="tab">
+                        <i class="fa fa-shopping-cart" aria-hidden="true"></i>
+                        {% trans "By Product" %}
+                    </a>
+                </li>
+                <li role="presentation" class="{% if scope == 'testplan' %}active{% endif %}">
+                    <a href="#tab-testplan" data-toggle="tab" role="tab">
+                        <i class="fa fa-sitemap" aria-hidden="true"></i>
+                        {% trans "By Test Plan" %}
+                    </a>
+                </li>
+                <li role="presentation" class="{% if scope == 'testrun' %}active{% endif %}">
+                    <a href="#tab-testrun" data-toggle="tab" role="tab">
+                        <i class="fa fa-play-circle" aria-hidden="true"></i>
+                        {% trans "By Test Run" %}
+                    </a>
+                </li>
+            </ul>
+
+            <div class="tab-content">
+
+                {# Product #}
+                <div class="tab-pane {% if scope == 'product' %}active{% endif %}" id="tab-product" role="tabpanel">
+                    <form class="form-horizontal" id="report-form-product">
+                        <div class="form-group">
+                            <label class="col-md-2 control-label" for="rh-product">{% trans "Product" %}</label>
+                            <div class="col-md-6">
+                                <select id="rh-product" class="selectpicker" data-live-search="true"
+                                        data-style="btn-default" title="{% trans 'Select a product...' %}">
+                                    {% for p in products %}
+                                    <option value="{{ p.pk }}">{{ p.name }}</option>
+                                    {% endfor %}
+                                </select>
+                            </div>
+                        </div>
+                        <div class="form-group">
+                            <label class="col-md-2 control-label" for="rh-product-start">{% trans "From" %}</label>
+                            <div class="col-md-3">
+                                <input type="date" id="rh-product-start" class="form-control" placeholder="YYYY-MM-DD">
+                            </div>
+                            <label class="col-md-1 control-label" for="rh-product-end">{% trans "To" %}</label>
+                            <div class="col-md-3">
+                                <input type="date" id="rh-product-end" class="form-control" placeholder="YYYY-MM-DD">
+                            </div>
+                        </div>
+                        <div class="form-group">
+                            <div class="col-md-offset-2 col-md-10">
+                                <button type="button" class="btn btn-primary"
+                                        data-export-base="/reviews/reports/product/"
+                                        data-entity-input="#rh-product"
+                                        data-start-input="#rh-product-start"
+                                        data-end-input="#rh-product-end"
+                                        data-fmt="docx">
+                                    <i class="fa fa-file-word-o" aria-hidden="true"></i> {% trans "Export DOCX" %}
+                                </button>
+                                <button type="button" class="btn btn-default"
+                                        data-export-base="/reviews/reports/product/"
+                                        data-entity-input="#rh-product"
+                                        data-start-input="#rh-product-start"
+                                        data-end-input="#rh-product-end"
+                                        data-fmt="pdf">
+                                    <i class="fa fa-file-pdf-o" aria-hidden="true"></i> {% trans "Export PDF" %}
+                                </button>
+                            </div>
+                        </div>
+                    </form>
+                </div>
+
+                {# TestPlan #}
+                <div class="tab-pane {% if scope == 'testplan' %}active{% endif %}" id="tab-testplan" role="tabpanel">
+                    <form class="form-horizontal" id="report-form-testplan">
+                        <div class="form-group">
+                            <label class="col-md-2 control-label" for="rh-testplan">{% trans "Test Plan" %}</label>
+                            <div class="col-md-6">
+                                <select id="rh-testplan" class="selectpicker" data-live-search="true"
+                                        data-style="btn-default" title="{% trans 'Select a test plan...' %}">
+                                    {% for plan in testplans %}
+                                    <option value="{{ plan.pk }}">TP-{{ plan.pk }}: {{ plan.name }}</option>
+                                    {% endfor %}
+                                </select>
+                            </div>
+                        </div>
+                        <div class="form-group">
+                            <label class="col-md-2 control-label" for="rh-testplan-start">{% trans "From" %}</label>
+                            <div class="col-md-3">
+                                <input type="date" id="rh-testplan-start" class="form-control">
+                            </div>
+                            <label class="col-md-1 control-label" for="rh-testplan-end">{% trans "To" %}</label>
+                            <div class="col-md-3">
+                                <input type="date" id="rh-testplan-end" class="form-control">
+                            </div>
+                        </div>
+                        <div class="form-group">
+                            <div class="col-md-offset-2 col-md-10">
+                                <button type="button" class="btn btn-primary"
+                                        data-export-base="/reviews/reports/testplan/"
+                                        data-entity-input="#rh-testplan"
+                                        data-start-input="#rh-testplan-start"
+                                        data-end-input="#rh-testplan-end"
+                                        data-fmt="docx">
+                                    <i class="fa fa-file-word-o" aria-hidden="true"></i> {% trans "Export DOCX" %}
+                                </button>
+                                <button type="button" class="btn btn-default"
+                                        data-export-base="/reviews/reports/testplan/"
+                                        data-entity-input="#rh-testplan"
+                                        data-start-input="#rh-testplan-start"
+                                        data-end-input="#rh-testplan-end"
+                                        data-fmt="pdf">
+                                    <i class="fa fa-file-pdf-o" aria-hidden="true"></i> {% trans "Export PDF" %}
+                                </button>
+                            </div>
+                        </div>
+                    </form>
+                </div>
+
+                {# TestRun #}
+                <div class="tab-pane {% if scope == 'testrun' %}active{% endif %}" id="tab-testrun" role="tabpanel">
+                    <form class="form-horizontal" id="report-form-testrun">
+                        <div class="form-group">
+                            <label class="col-md-2 control-label" for="rh-testrun">{% trans "Test Run" %}</label>
+                            <div class="col-md-6">
+                                <select id="rh-testrun" class="selectpicker" data-live-search="true"
+                                        data-style="btn-default" title="{% trans 'Select a test run...' %}">
+                                    {% for run in testruns %}
+                                    <option value="{{ run.pk }}">TR-{{ run.pk }}: {{ run.summary }}</option>
+                                    {% endfor %}
+                                </select>
+                            </div>
+                        </div>
+                        <div class="form-group">
+                            <label class="col-md-2 control-label" for="rh-testrun-start">{% trans "From" %}</label>
+                            <div class="col-md-3">
+                                <input type="date" id="rh-testrun-start" class="form-control">
+                            </div>
+                            <label class="col-md-1 control-label" for="rh-testrun-end">{% trans "To" %}</label>
+                            <div class="col-md-3">
+                                <input type="date" id="rh-testrun-end" class="form-control">
+                            </div>
+                        </div>
+                        <div class="form-group">
+                            <div class="col-md-offset-2 col-md-10">
+                                <button type="button" class="btn btn-primary"
+                                        data-export-base="/reviews/reports/testrun/"
+                                        data-entity-input="#rh-testrun"
+                                        data-start-input="#rh-testrun-start"
+                                        data-end-input="#rh-testrun-end"
+                                        data-fmt="docx">
+                                    <i class="fa fa-file-word-o" aria-hidden="true"></i> {% trans "Export DOCX" %}
+                                </button>
+                                <button type="button" class="btn btn-default"
+                                        data-export-base="/reviews/reports/testrun/"
+                                        data-entity-input="#rh-testrun"
+                                        data-start-input="#rh-testrun-start"
+                                        data-end-input="#rh-testrun-end"
+                                        data-fmt="pdf">
+                                    <i class="fa fa-file-pdf-o" aria-hidden="true"></i> {% trans "Export PDF" %}
+                                </button>
+                            </div>
+                        </div>
+                    </form>
+                </div>
+
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

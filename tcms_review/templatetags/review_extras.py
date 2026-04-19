@@ -10,6 +10,24 @@ register = template.Library()
 
 
 @register.simple_tag
+def format_duration(td):
+    """Render a timedelta as 'HHh MMm SSs MMMms' with unit labels.
+
+    Kiwi users asked for explicit units so the time-to-decision KPIs read
+    unambiguously. Returns an em-dash for None / missing values.
+    """
+    if td is None:
+        return "—"
+    total_ms = int(td.total_seconds() * 1000)
+    if total_ms < 0:
+        total_ms = 0
+    hours, rem_ms = divmod(total_ms, 3_600_000)
+    minutes, rem_ms = divmod(rem_ms, 60_000)
+    seconds, ms = divmod(rem_ms, 1000)
+    return f"{hours:02d}h {minutes:02d}m {seconds:02d}s {ms:03d}ms"
+
+
+@register.simple_tag
 def review_static(path):
     """Like {% static %} but with the plugin version appended as a cache-buster.
 

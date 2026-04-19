@@ -14,6 +14,12 @@ urlpatterns = [
     re_path(r"^item/(?P<pk>\d+)/resubmit/$", views.ResubmitItem.as_view(), name="review-item-resubmit"),
     re_path(r"^search/$", views.Search.as_view(), name="review-search"),
     re_path(r"^stats/$", views.Stats.as_view(), name="review-stats"),
+    # Exports
+    re_path(r"^reports/$", views.ReportHub.as_view(), name="review-report-hub"),
+    re_path(r"^(?P<pk>\d+)/export/(?P<fmt>docx|pdf)/$", views.ExportSingle.as_view(), name="review-export-single"),
+    re_path(r"^reports/product/(?P<product_pk>\d+)/(?P<fmt>docx|pdf)/$", views.ExportProduct.as_view(), name="review-export-product"),
+    re_path(r"^reports/testplan/(?P<plan_pk>\d+)/(?P<fmt>docx|pdf)/$", views.ExportTestplan.as_view(), name="review-export-testplan"),
+    re_path(r"^reports/testrun/(?P<run_pk>\d+)/(?P<fmt>docx|pdf)/$", views.ExportTestrun.as_view(), name="review-export-testrun"),
     # JSON endpoints consumed by inject.js (dashboard widget, per-case badge, config)
     re_path(r"^json/pending-mine/$", views.PendingMineJSON.as_view(), name="review-json-pending-mine"),
     re_path(r"^json/case/(?P<case_pk>\d+)/latest/$", views.CaseLatestJSON.as_view(), name="review-json-case-latest"),

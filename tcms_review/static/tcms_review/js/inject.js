@@ -488,11 +488,18 @@
         return $btn;
     }
 
-    function injectSendButton(ctx) {
-        if (!ctx.pk) { return; }
+    // Current user id injected by the middleware on every HTML response.
+    function getCurrentUserId() {
+        var tag = document.querySelector('script[data-source="tcms_review"]');
+        if (!tag) { return null; }
+        var raw = tag.dataset.currentUserId;
+        if (!raw) { return null; }
+        var parsed = parseInt(raw, 10);
+        return isNaN(parsed) ? null : parsed;
+    }
 
+    function renderSendButton(ctx) {
         if (ctx.kind === 'testcase') {
-            // TestCase detail: inject after the <h1> heading
             var $h1 = $('h1.col-md-12').first();
             if ($h1.length) {
                 var $btnWrap = $('<div class="col-md-12" style="margin-bottom:12px;"/>');
@@ -501,9 +508,7 @@
                 return;
             }
         }
-
         if (ctx.kind === 'testplan') {
-            // TestPlan detail: inject into the toolbar actions area
             var $toolbar = $('.toolbar-pf-actions').first();
             if ($toolbar.length) {
                 var $group = $('<div class="form-group" style="margin-left:8px; display:inline-block;"/>');
@@ -512,11 +517,42 @@
                 return;
             }
         }
-
         // Fallback
         var $heading = $('.card-pf-heading').first();
         if ($heading.length) {
             $heading.append(' ').append(buildSendButton(ctx));
+        }
+    }
+
+    function injectSendButton(ctx) {
+        if (!ctx.pk) { return; }
+
+        // For testplans, any authenticated user with permission can send
+        // the plan for review (no author concept at the plan level the same way).
+        if (ctx.kind === 'testplan') {
+            renderSendButton(ctx);
+            return;
+        }
+
+        if (ctx.kind === 'testcase') {
+            var currentUserId = getCurrentUserId();
+            if (currentUserId === null) {
+                // Anonymous / anonymous-ish — fail closed.
+                return;
+            }
+
+            // Author-only: the Send-for-review button is only useful to the
+            // case's author (or default tester). Fetch the case once and
+            // compare against the current user id. Fail closed on RPC error.
+            jsonRPC('TestCase.filter', { pk: parseInt(ctx.pk, 10) }, function (data) {
+                if (!data || !data.length) { return; }
+                var tc = data[0];
+                var isAuthor = tc.author === currentUserId;
+                var isTester = tc.default_tester === currentUserId;
+                if (isAuthor || isTester) {
+                    renderSendButton(ctx);
+                }
+            });
         }
     }
 
@@ -807,6 +843,29 @@
         }
     }
 
+    // ─── Report hub export buttons ─────────────────────────────────────
+
+    function wireReportHubExports() {
+        $('[data-export-base][data-entity-input][data-fmt]').on('click', function () {
+            var $btn = $(this);
+            var base = $btn.data('export-base');
+            var fmt = $btn.data('fmt');
+            var entityId = $($btn.data('entity-input')).val();
+            var start = $($btn.data('start-input')).val();
+            var end = $($btn.data('end-input')).val();
+            if (!entityId) {
+                showError('Please select a value from the dropdown first.');
+                return;
+            }
+            var params = [];
+            if (start) { params.push('start=' + encodeURIComponent(start)); }
+            if (end) { params.push('end=' + encodeURIComponent(end)); }
+            var qs = params.length ? ('?' + params.join('&')) : '';
+            var url = base + encodeURIComponent(entityId) + '/' + fmt + '/' + qs;
+            window.location.href = url;
+        });
+    }
+
     // ─── Datepicker init for server-rendered forms ─────────────────────
 
     function initDatePickers() {
@@ -827,6 +886,7 @@
         wireAddCaseForm();
         wireCaseBrowser();
         wireActivityFeed();
+        wireReportHubExports();
         initDatePickers();
 
         var ctx = detectPageContext();

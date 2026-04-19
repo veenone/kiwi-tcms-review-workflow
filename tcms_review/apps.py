@@ -37,6 +37,11 @@ class ReviewConfig(AppConfig):
             sender=ReviewRequest,
             dispatch_uid="tcms_review.email_post_request_save",
         )
+        post_save.connect(
+            review_signals.handle_wiki_sync_post_review_request_save,
+            sender=ReviewRequest,
+            dispatch_uid="tcms_review.wiki_sync_post_request_save",
+        )
         m2m_changed.connect(
             review_signals.handle_reviewers_changed,
             sender=ReviewRequest.reviewers.through,

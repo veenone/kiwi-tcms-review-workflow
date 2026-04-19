@@ -4,7 +4,7 @@
 
 Group test cases into a structured **Review Request**, assign reviewers, collect per-reviewer votes and per-case decisions, notify by email, track KPIs, and report on completed sessions — all without modifying the Kiwi TCMS core codebase.
 
-![Dashboard with pending reviews](docs/screenshots/01-dashboard-pending-reviews.png)
+![Dashboard with pending reviews](https://raw.githubusercontent.com/veenone/kiwi-tcms-review-workflow/main/docs/screenshots/01-dashboard-pending-reviews.png)
 
 ---
 
@@ -48,55 +48,55 @@ Group test cases into a structured **Review Request**, assign reviewers, collect
 
 Injects a "Pending my review" card into the Kiwi dashboard listing every open review request assigned to the current user.
 
-![Dashboard with pending-reviews widget](docs/screenshots/01-dashboard-pending-reviews.png)
+![Dashboard with pending-reviews widget](https://raw.githubusercontent.com/veenone/kiwi-tcms-review-workflow/main/docs/screenshots/01-dashboard-pending-reviews.png)
 
 ### Review list
 
 Filterable list of all review requests with colour-coded state badges.
 
-![Review request list](docs/screenshots/02-list.png)
+![Review request list](https://raw.githubusercontent.com/veenone/kiwi-tcms-review-workflow/main/docs/screenshots/02-list.png)
 
 ### New review request
 
 Markdown-enabled form with date picker, reviewer selectpicker, and a proper breadcrumb.
 
-![New review request form](docs/screenshots/03-new.png)
+![New review request form](https://raw.githubusercontent.com/veenone/kiwi-tcms-review-workflow/main/docs/screenshots/03-new.png)
 
 ### Review detail
 
 KPI strip, reviewer-and-votes table, cases-under-review table with inline per-case decision buttons, and a markdown vote form.
 
-![Review request detail page](docs/screenshots/04-detail.png)
+![Review request detail page](https://raw.githubusercontent.com/veenone/kiwi-tcms-review-workflow/main/docs/screenshots/04-detail.png)
 
 ### TestCase / TestPlan browser
 
 Bulk-add cases either by searching or by drilling into a test plan.
 
-![TestCase browser on detail page](docs/screenshots/05-detail-testcase-browser.png)
+![TestCase browser on detail page](https://raw.githubusercontent.com/veenone/kiwi-tcms-review-workflow/main/docs/screenshots/05-detail-testcase-browser.png)
 
 ### Statistics dashboard
 
 KPI cards, review-time overview, and four C3.js charts summarising the whole review process.
 
-![Statistics dashboard with charts](docs/screenshots/06-stats.png)
+![Statistics dashboard with charts](https://raw.githubusercontent.com/veenone/kiwi-tcms-review-workflow/main/docs/screenshots/06-stats.png)
 
 ### Per-session report
 
 Drill into any request to see the full metrics — participation, time to decision, per-case counts, and per-reviewer activity.
 
-![Per-session report](docs/screenshots/07-report.png)
+![Per-session report](https://raw.githubusercontent.com/veenone/kiwi-tcms-review-workflow/main/docs/screenshots/07-report.png)
 
 ### TestCase detail — injected button and badge
 
 The plugin grafts a status badge (next to the case title) and a "Send for review" button onto every TestCase detail page without touching the core template.
 
-![TestCase detail with injected button and badge](docs/screenshots/08-testcase-detail-with-button.png)
+![TestCase detail with injected button and badge](https://raw.githubusercontent.com/veenone/kiwi-tcms-review-workflow/main/docs/screenshots/08-testcase-detail-with-button.png)
 
 ### Send-for-review modal
 
 Click the button to open a modal with username typeahead and a date picker, all wired to the plugin's JSON-RPC API.
 
-![Send for review modal](docs/screenshots/09-send-for-review-modal.png)
+![Send for review modal](https://raw.githubusercontent.com/veenone/kiwi-tcms-review-workflow/main/docs/screenshots/09-send-for-review-modal.png)
 
 ---
 

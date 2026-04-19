@@ -1,6 +1,6 @@
 from django.contrib.auth.decorators import login_required, permission_required
 from django.core.exceptions import PermissionDenied
-from django.http import HttpResponseRedirect, JsonResponse
+from django.http import HttpResponse, HttpResponseRedirect, JsonResponse
 from django.shortcuts import get_object_or_404
 from django.urls import reverse, reverse_lazy
 from django.utils.decorators import method_decorator
@@ -590,4 +590,129 @@ class Stats(TemplateView):
             "daily": daily,
         })
 
+        return ctx
+
+
+# ─── Report hub + exports ─────────────────────────────────────────────
+
+
+_ALLOWED_FORMATS = ("docx", "pdf")
+
+_FORMAT_CONTENT_TYPE = {
+    "docx": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+    "pdf": "application/pdf",
+}
+
+
+def _render_export(fmt, data, single=False):
+    """Dispatch to the right renderer and return an HttpResponse with
+    the correct content-type + attachment filename."""
+    from tcms_review.exports import data as data_module  # noqa: WPS433
+
+    if fmt not in _ALLOWED_FORMATS:
+        raise PermissionDenied("Unsupported export format.")
+
+    if fmt == "docx":
+        from tcms_review.exports.docx_renderer import render_single_review, render_consolidated  # noqa: WPS433
+    else:
+        from tcms_review.exports.pdf_renderer import render_single_review, render_consolidated  # noqa: WPS433
+
+    buf = render_single_review(data) if single else render_consolidated(data)
+    if single:
+        filename = data_module.export_filename("single", data["review"]["id"], fmt)
+    else:
+        filename = data_module.export_filename(
+            data["scope"], data["scope_entity"]["id"], fmt,
+        )
+
+    response = HttpResponse(
+        buf.read(),
+        content_type=_FORMAT_CONTENT_TYPE[fmt],
+    )
+    response["Content-Disposition"] = f'attachment; filename="{filename}"'
+    return response
+
+
+def _parse_date(raw):
+    """Parse a YYYY-MM-DD query-string value to a tz-aware datetime."""
+    if not raw:
+        return None
+    from django.utils.dateparse import parse_date  # noqa: WPS433
+    from django.utils import timezone  # noqa: WPS433
+    from datetime import datetime, time  # noqa: WPS433
+
+    d = parse_date(raw)
+    if not d:
+        return None
+    return timezone.make_aware(datetime.combine(d, time.min))
+
+
+@method_decorator(login_required, name="dispatch")
+@method_decorator(permission_required("tcms_review.view_reviewrequest"), name="dispatch")
+class ExportSingle(View):
+    """Download a single review's report as DOCX or PDF."""
+
+    def get(self, request, pk, fmt):
+        from tcms_review.exports.data import single_review  # noqa: WPS433
+
+        get_object_or_404(ReviewRequest, pk=pk)  # 404 if missing / bad pk
+        data = single_review(pk)
+        return _render_export(fmt, data, single=True)
+
+
+@method_decorator(login_required, name="dispatch")
+@method_decorator(permission_required("tcms_review.view_reviewrequest"), name="dispatch")
+class ExportProduct(View):
+    def get(self, request, product_pk, fmt):
+        from tcms_review.exports.data import consolidated_by_product  # noqa: WPS433
+
+        start = _parse_date(request.GET.get("start"))
+        end = _parse_date(request.GET.get("end"))
+        data = consolidated_by_product(product_pk, start=start, end=end)
+        return _render_export(fmt, data)
+
+
+@method_decorator(login_required, name="dispatch")
+@method_decorator(permission_required("tcms_review.view_reviewrequest"), name="dispatch")
+class ExportTestplan(View):
+    def get(self, request, plan_pk, fmt):
+        from tcms_review.exports.data import consolidated_by_testplan  # noqa: WPS433
+
+        start = _parse_date(request.GET.get("start"))
+        end = _parse_date(request.GET.get("end"))
+        data = consolidated_by_testplan(plan_pk, start=start, end=end)
+        return _render_export(fmt, data)
+
+
+@method_decorator(login_required, name="dispatch")
+@method_decorator(permission_required("tcms_review.view_reviewrequest"), name="dispatch")
+class ExportTestrun(View):
+    def get(self, request, run_pk, fmt):
+        from tcms_review.exports.data import consolidated_by_testrun  # noqa: WPS433
+
+        start = _parse_date(request.GET.get("start"))
+        end = _parse_date(request.GET.get("end"))
+        data = consolidated_by_testrun(run_pk, start=start, end=end)
+        return _render_export(fmt, data)
+
+
+@method_decorator(login_required, name="dispatch")
+@method_decorator(permission_required("tcms_review.view_reviewrequest"), name="dispatch")
+class ReportHub(TemplateView):
+    """Landing page for consolidated exports — pick product/plan/run + date range."""
+
+    template_name = "tcms_review/report_hub.html"
+
+    def get_context_data(self, **kwargs):
+        ctx = super().get_context_data(**kwargs)
+        ctx["scope"] = self.request.GET.get("scope", "product")
+
+        # Lazy imports so module load doesn't drag Kiwi models.
+        from tcms.management.models import Product  # noqa: WPS433
+        from tcms.testplans.models import TestPlan  # noqa: WPS433
+        from tcms.testruns.models import TestRun  # noqa: WPS433
+
+        ctx["products"] = Product.objects.order_by("name")[:200]
+        ctx["testplans"] = TestPlan.objects.order_by("-pk")[:200]
+        ctx["testruns"] = TestRun.objects.select_related("plan").order_by("-pk")[:200]
         return ctx

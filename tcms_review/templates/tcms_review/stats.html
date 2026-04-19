@@ -74,25 +74,25 @@
                 <div class="aggregate-status-pf">
                     <div class="aggregate-status-pf-title">{% trans "Avg. time to decision" %}</div>
                     <div class="aggregate-status-pf-count">
-                        {{ avg_time_to_decision|default:"—" }}
+                        {% format_duration avg_time_to_decision %}
                     </div>
                 </div>
                 <div class="aggregate-status-pf">
                     <div class="aggregate-status-pf-title">{% trans "Median time to decision" %}</div>
                     <div class="aggregate-status-pf-count">
-                        {{ median_time_to_decision|default:"—" }}
+                        {% format_duration median_time_to_decision %}
                     </div>
                 </div>
                 <div class="aggregate-status-pf">
                     <div class="aggregate-status-pf-title">{% trans "Fastest" %}</div>
                     <div class="aggregate-status-pf-count text-success">
-                        {{ fastest_decision|default:"—" }}
+                        {% format_duration fastest_decision %}
                     </div>
                 </div>
                 <div class="aggregate-status-pf">
                     <div class="aggregate-status-pf-title">{% trans "Slowest" %}</div>
                     <div class="aggregate-status-pf-count text-warning">
-                        {{ slowest_decision|default:"—" }}
+                        {% format_duration slowest_decision %}
                     </div>
                 </div>
             </div>

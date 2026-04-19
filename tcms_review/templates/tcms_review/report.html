@@ -27,6 +27,14 @@
             <p class="card-pf-subtitle">
                 {% blocktrans with requester=review_request.requester.username created=review_request.created_at|date:"Y-m-d H:i" %}Requested by {{ requester }} on {{ created }}{% endblocktrans %}
             </p>
+            <div class="review-report-export-actions" style="margin-top:8px;">
+                <a class="btn btn-default btn-sm" href="{% url 'review-export-single' review_request.pk 'docx' %}">
+                    <i class="fa fa-file-word-o" aria-hidden="true"></i> {% trans "Export DOCX" %}
+                </a>
+                <a class="btn btn-default btn-sm" href="{% url 'review-export-single' review_request.pk 'pdf' %}">
+                    <i class="fa fa-file-pdf-o" aria-hidden="true"></i> {% trans "Export PDF" %}
+                </a>
+            </div>
         </div>
 
         <div class="card-pf-body">
@@ -54,7 +62,7 @@
                 {% if metrics.time_to_decision %}
                 <div class="aggregate-status-pf">
                     <div class="aggregate-status-pf-title">{% trans "Time to decision" %}</div>
-                    <div class="aggregate-status-pf-count">{{ metrics.time_to_decision }}</div>
+                    <div class="aggregate-status-pf-count">{% format_duration metrics.time_to_decision %}</div>
                 </div>
                 {% endif %}
             </div>

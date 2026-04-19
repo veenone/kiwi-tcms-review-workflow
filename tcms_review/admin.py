@@ -7,6 +7,7 @@ from tcms_review.models import (
     ReviewRequest,
     ReviewStatusTransition,
     ReviewVote,
+    WikiIntegrationConfig,
 )
 
 
@@ -88,3 +89,70 @@ class ReviewStatusTransitionAdmin(SimpleHistoryAdmin):
             ),
         }),
     )
+
+
+@admin.register(WikiIntegrationConfig)
+class WikiIntegrationConfigAdmin(SimpleHistoryAdmin):
+    """Singleton admin for the external wiki integration (Outline / Confluence)."""
+
+    list_display = ("pk", "backend", "base_url", "collection_id", "updated_at")
+    readonly_fields = ("updated_at",)
+    fieldsets = (
+        ("Connection", {
+            "fields": ("backend", "base_url", "api_token", "auth_email", "collection_id"),
+            "description": (
+                "<b>Backend:</b> pick the wiki you're syncing to. Set to "
+                "<i>Disabled</i> to turn the integration off.<br>"
+                "<b>Outline:</b> fill in Base URL + API token + Collection ID.<br>"
+                "<b>Confluence:</b> fill in Base URL + API token + Auth email + Space Key "
+                "(use the Space Key in the Collection ID field)."
+            ),
+        }),
+        ("Sync behavior", {
+            "fields": ("auto_create", "auto_update", "auto_close_marker"),
+            "description": (
+                "Which review lifecycle events should trigger a wiki call. "
+                "All sync calls run in a background thread — a broken wiki "
+                "will never block a review action."
+            ),
+        }),
+        ("Meta", {"fields": ("updated_at",)}),
+    )
+
+    def has_add_permission(self, request):
+        return not WikiIntegrationConfig.objects.exists()
+
+    def has_delete_permission(self, request, obj=None):
+        return False
+
+    def save_model(self, request, obj, form, change):
+        """Persist then probe the connection; surface the outcome as a Django message."""
+        from django.contrib import messages  # noqa: WPS433
+        from tcms_review.integrations.wiki.adapters import get_adapter, WikiSyncError  # noqa: WPS433
+
+        super().save_model(request, obj, form, change)
+
+        if not obj.is_enabled:
+            messages.info(request, "Wiki integration is disabled — nothing to test.")
+            return
+
+        adapter = get_adapter(obj)
+        if adapter is None:
+            messages.warning(
+                request,
+                "Configuration incomplete — provide all required fields for the "
+                "selected backend before connection can be tested.",
+            )
+            return
+
+        try:
+            name = adapter.test_connection()
+            messages.success(
+                request,
+                f"Connection OK. Target {obj.get_backend_display()} "
+                f"collection/space: '{name}'.",
+            )
+        except WikiSyncError as exc:
+            messages.error(
+                request, f"Connection test failed: {exc}",
+            )
