@@ -85,7 +85,7 @@ def state_badge(state, display=None):
 def decision_badge(decision, display=None):
     css = _DECISION_LABEL_CLASS.get(decision, "label-default")
     label = display or decision.replace("_", " ").title()
-    return _label(label, css)
+    return _label(label, css, role="status")
 
 
 @register.filter

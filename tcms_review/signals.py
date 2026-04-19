@@ -280,7 +280,7 @@ def _do_wiki_create(review_request):
 def _do_wiki_update(review_request, previous_state, event="state_changed"):
     from tcms_review.integrations.wiki.adapters import get_adapter, WikiSyncError  # noqa: WPS433
     from tcms_review.integrations.wiki import builder  # noqa: WPS433
-    from tcms_review.models import WikiIntegrationConfig  # noqa: WPS433
+    from tcms_review.models import WikiIntegrationConfig, ReviewRequest  # noqa: WPS433
 
     if not review_request.wiki_page_id:
         return
@@ -291,24 +291,15 @@ def _do_wiki_update(review_request, previous_state, event="state_changed"):
     if adapter is None:
         return
 
-    body = builder.build_update_body(
-        review_request,
-        previous_state=previous_state,
-        event=event,
-        actor=(review_request.requester.username if review_request.requester else "system"),
-    )
+    # Re-fetch from DB to make sure the rebuild sees the current state
+    # (callers sometimes pass an instance captured before a save).
+    review_request = ReviewRequest.objects.get(pk=review_request.pk)
+
+    body = builder.build_full_body(review_request)
     try:
-        adapter.update_page(review_request.wiki_page_id, body, append=True)
+        adapter.update_page(review_request.wiki_page_id, body, append=False)
     except WikiSyncError:
         raise
-
-    # Optional: close marker on terminal state.
-    from tcms_review.state_machine import State  # noqa: WPS433
-    if config.auto_close_marker and review_request.state in State.TERMINAL:
-        try:
-            adapter.close_page(review_request.wiki_page_id)
-        except WikiSyncError:
-            raise
 
 
 def handle_wiki_sync_post_review_request_save(
@@ -356,8 +347,7 @@ def cache_previous_vote_decision(sender, instance, **kwargs):
 def _do_wiki_append_item_decision(review_request, item, previous_decision, actor):
     from tcms_review.integrations.wiki.adapters import get_adapter, WikiSyncError  # noqa: WPS433
     from tcms_review.integrations.wiki import builder  # noqa: WPS433
-    from tcms_review.models import WikiIntegrationConfig  # noqa: WPS433
-    from tcms_review.models import ReviewRequest  # noqa: WPS433
+    from tcms_review.models import WikiIntegrationConfig, ReviewRequest  # noqa: WPS433
 
     config = WikiIntegrationConfig.objects.first()
     if not config:
@@ -366,36 +356,35 @@ def _do_wiki_append_item_decision(review_request, item, previous_decision, actor
     if adapter is None:
         return
 
+    # Re-fetch to get the freshest state — reviewers M2M, items, votes —
+    # before rebuilding the body.
+    review_request = ReviewRequest.objects.get(pk=review_request.pk)
+
     # Lazy create: if the request has no wiki page yet AND auto_create
-    # is on, do the full initial page build now — by now the reviewer
-    # M2M is populated and at least one ReviewItem exists, so the body
-    # shows the real state instead of "No cases yet".
+    # is on, create it now. By the first ReviewItem save the reviewers
+    # M2M is populated, so the initial body reflects the real state.
     if not review_request.wiki_page_id:
         if not config.auto_create:
             return
-        # Refetch to pick up any M2M that landed after the save
-        review_request = ReviewRequest.objects.get(pk=review_request.pk)
         title = builder.build_title(review_request)
-        body_md = builder.build_create_body(review_request)
+        body_md = builder.build_full_body(review_request)
         page_id = adapter.create_page(title=title, body_md=body_md)
         ReviewRequest.objects.filter(pk=review_request.pk).update(
             wiki_page_id=page_id,
         )
-        # The initial body already reflects the freshly-added item, so
-        # skip the per-item append to avoid double-logging the first save.
         return
 
     if not config.auto_update:
         return
 
-    body = builder.build_item_decision_body(item, previous_decision, actor=actor)
-    adapter.update_page(review_request.wiki_page_id, body, append=True)
+    body = builder.build_full_body(review_request)
+    adapter.update_page(review_request.wiki_page_id, body, append=False)
 
 
 def _do_wiki_append_vote_cast(review_request, vote, previous_decision, actor):
     from tcms_review.integrations.wiki.adapters import get_adapter, WikiSyncError  # noqa: WPS433
     from tcms_review.integrations.wiki import builder  # noqa: WPS433
-    from tcms_review.models import WikiIntegrationConfig  # noqa: WPS433
+    from tcms_review.models import WikiIntegrationConfig, ReviewRequest  # noqa: WPS433
 
     if not review_request.wiki_page_id:
         return
@@ -406,8 +395,9 @@ def _do_wiki_append_vote_cast(review_request, vote, previous_decision, actor):
     if adapter is None:
         return
 
-    body = builder.build_vote_cast_body(vote, previous_decision, actor=actor)
-    adapter.update_page(review_request.wiki_page_id, body, append=True)
+    review_request = ReviewRequest.objects.get(pk=review_request.pk)
+    body = builder.build_full_body(review_request)
+    adapter.update_page(review_request.wiki_page_id, body, append=False)
 
 
 def handle_wiki_sync_post_review_item_save(sender, instance, created, **kwargs):
