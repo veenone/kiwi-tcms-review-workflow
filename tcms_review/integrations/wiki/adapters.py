@@ -20,13 +20,28 @@ class WikiSyncError(Exception):
     """Raised when the wiki adapter can't create/update/close a page."""
 
 
+import re
+
+_UUID_RE = re.compile(
+    r"^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+    re.IGNORECASE,
+)
+
+
 class OutlineAdapter:
-    """Uses Outline's documented REST API (https://getoutline.com/developers)."""
+    """Uses Outline's documented REST API (https://getoutline.com/developers).
+
+    Accepts either a collection UUID or a urlId slug (like
+    'my-collection-DxNLmVSkhy') in `collection_id`. The slug is
+    resolved to a UUID on first use via collections.info, because
+    documents.create strictly requires the UUID form.
+    """
 
     def __init__(self, base_url: str, api_token: str, collection_id: str):
         self.base_url = base_url.rstrip("/")
         self.api_token = api_token
-        self.collection_id = collection_id
+        self.collection_id = collection_id  # raw input (slug or UUID)
+        self._resolved_uuid = None
         self.timeout = 10
 
     def _post(self, endpoint: str, payload: dict) -> dict:
@@ -55,17 +70,43 @@ class OutlineAdapter:
         except ValueError as exc:
             raise WikiSyncError(f"Outline {endpoint}: invalid JSON: {exc}") from exc
 
+    def _resolve_collection_uuid(self) -> str:
+        """Resolve the stored collection_id (UUID or slug) to a UUID.
+        Cached on first call."""
+        if self._resolved_uuid:
+            return self._resolved_uuid
+
+        if _UUID_RE.match(self.collection_id):
+            self._resolved_uuid = self.collection_id
+            return self._resolved_uuid
+
+        # Treat as urlId slug — ask collections.info, which accepts both
+        body = self._post("collections.info", {"id": self.collection_id})
+        data = body.get("data") or {}
+        uuid = data.get("id")
+        if not uuid or not _UUID_RE.match(uuid):
+            raise WikiSyncError(
+                f"Outline collections.info returned no UUID for "
+                f"'{self.collection_id}'"
+            )
+        self._resolved_uuid = uuid
+        return uuid
+
     def test_connection(self) -> Optional[str]:
         """Return the collection name if credentials work, else raise."""
         body = self._post("collections.info", {"id": self.collection_id})
         data = body.get("data") or {}
+        # Opportunistically cache the UUID since we already have it.
+        uuid = data.get("id")
+        if uuid and _UUID_RE.match(uuid):
+            self._resolved_uuid = uuid
         return data.get("name")
 
     def create_page(self, title: str, body_md: str) -> str:
         body = self._post("documents.create", {
             "title": title,
             "text": body_md,
-            "collectionId": self.collection_id,
+            "collectionId": self._resolve_collection_uuid(),
             "publish": True,
         })
         doc_id = (body.get("data") or {}).get("id")
