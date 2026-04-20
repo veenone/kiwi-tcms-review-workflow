@@ -65,12 +65,21 @@ _DECISION_LABEL_CLASS = {
 }
 
 
-def _label(text, css_class, icon=None, role=None):
+def _label(text, css_class, icon=None, role=None, pill=False):
     icon_html = f'<i class="{icon}" aria-hidden="true"></i> ' if icon else ""
     role_attr = f' role="{role}"' if role else ""
+    pill_class = " review-label-pill" if pill else ""
     return mark_safe(  # nosec: rendered values are class names + already-translated labels
-        f'<span class="label {css_class}"{role_attr}>{icon_html}{text}</span>'
+        f'<span class="label {css_class}{pill_class}"{role_attr}>{icon_html}{text}</span>'
     )
+
+
+_DECISION_ICON = {
+    VoteDecision.APPROVED: "pficon pficon-ok",
+    VoteDecision.REJECTED: "pficon pficon-error-circle-o",
+    VoteDecision.NEEDS_CHANGES: "pficon pficon-warning-triangle-o",
+    "pending": "fa fa-hourglass-half",
+}
 
 
 @register.simple_tag
@@ -78,14 +87,15 @@ def state_badge(state, display=None):
     css = _STATE_LABEL_CLASS.get(state, "label-default")
     icon = _STATE_ICON.get(state)
     label = display or dict(State.CHOICES).get(state, state)
-    return _label(label, css, icon=icon, role="status")
+    return _label(label, css, icon=icon, role="status", pill=True)
 
 
 @register.simple_tag
 def decision_badge(decision, display=None):
     css = _DECISION_LABEL_CLASS.get(decision, "label-default")
+    icon = _DECISION_ICON.get(decision)
     label = display or decision.replace("_", " ").title()
-    return _label(label, css, role="status")
+    return _label(label, css, icon=icon, role="status", pill=True)
 
 
 @register.filter

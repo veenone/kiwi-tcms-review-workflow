@@ -1,19 +1,44 @@
 from django.apps import apps as global_apps
 from django.contrib.auth.management import create_permissions
 from django.db import migrations
+from django.db.utils import DatabaseError, IntegrityError, OperationalError, ProgrammingError
 
 
 def _ensure_permissions_exist():
-    """Permission rows are created by Django's post_migrate signal, which
-    fires AFTER the whole `migrate` run completes. That leaves this data
-    migration (which runs mid-run) looking at an empty Permission table.
+    """Best-effort creation of Permission rows for tcms_review's models.
 
-    Calling create_permissions explicitly for our own app config forces
-    the Permission rows to exist NOW so the grant below can find them.
+    Permission rows are normally created by Django's post_migrate signal,
+    which fires AFTER the whole `migrate` run completes. That would leave
+    this data migration (running mid-run) looking at an empty Permission
+    table, so we try to force-create the rows now.
+
+    Swallows DB errors: on installs where django_content_type still has
+    the legacy NOT NULL `name` column (contenttypes migration
+    0002_remove_content_type_name never applied), bulk_create of
+    ContentType rows raises IntegrityError. In that case we no-op and
+    rely on the post_migrate signal handler in apps.py::ready() to
+    retry the grant once the core apps have finished their work.
     """
-    app_config = global_apps.get_app_config("tcms_review")
-    app_config.models_module = app_config.models_module or True
-    create_permissions(app_config, verbosity=0)
+    try:
+        app_config = global_apps.get_app_config("tcms_review")
+    except LookupError:
+        return
+
+    # create_permissions short-circuits when models_module is falsy, but
+    # during `migrate` the config may not have its module attribute set
+    # yet. Stash and restore so we don't mutate the global app registry
+    # for the rest of the process.
+    original = getattr(app_config, "models_module", None)
+    if original is None:
+        app_config.models_module = True
+    try:
+        create_permissions(app_config, verbosity=0)
+    except (IntegrityError, OperationalError, ProgrammingError, DatabaseError):
+        # Schema mismatch or mid-migrate state — the post_migrate
+        # handler will finish the job.
+        pass
+    finally:
+        app_config.models_module = original
 
 
 def forwards_add_perms(apps, schema_editor):
@@ -50,6 +75,16 @@ def backwards(apps, schema_editor):
 
 
 class Migration(migrations.Migration):
+    # Disable the outer atomic wrapper. create_permissions + get_or_create
+    # use nested savepoints; on SQLite, a savepoint rollback leaves the
+    # outer transaction flagged `needs_rollback`, which then blows up the
+    # schema_editor's PRAGMA foreign_key_check on __exit__ with
+    # TransactionManagementError ("An error occurred in the current
+    # transaction. You can't execute queries until the end of the
+    # 'atomic' block."). Running non-atomic lets each statement manage
+    # its own transaction state independently.
+    atomic = False
+
     dependencies = [
         ("tcms_review", "0001_initial"),
     ]

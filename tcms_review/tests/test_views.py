@@ -1,4 +1,7 @@
+from unittest.mock import patch
+
 from django.contrib.auth.models import Permission
+from django.db.utils import DatabaseError
 from django.test import TestCase
 from django.urls import reverse
 
@@ -209,3 +212,63 @@ class JsonEndpointTests(TestCase):
         item = response.json()["item"]
         self.assertEqual(item["decision"], VoteDecision.APPROVED)
         self.assertEqual(item["review_request"]["id"], request.pk)
+
+
+class MissingTablesDefensiveTests(TestCase):
+    """Regression guards — when the plugin's tables don't exist (e.g.
+    migrations applied against the wrong DB), the views return a
+    200 with an empty payload instead of 500. Simulates the missing-
+    tables state by patching the ORM to raise DatabaseError.
+    """
+
+    def setUp(self):
+        self.user = UserFactory()
+        _grant_all(self.user)
+        self.client.force_login(self.user)
+
+    def test_pending_mine_returns_empty_on_database_error(self):
+        with patch(
+            "tcms_review.views.ReviewRequest.objects",
+        ) as objects_mock:
+            objects_mock.filter.side_effect = DatabaseError(
+                'relation "tcms_review_reviewrequest" does not exist',
+            )
+            response = self.client.get(reverse("review-json-pending-mine"))
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json(), {"results": []})
+
+    def test_case_latest_returns_null_on_database_error(self):
+        with patch(
+            "tcms_review.views.ReviewItem.objects",
+        ) as objects_mock:
+            objects_mock.filter.side_effect = DatabaseError(
+                'relation "tcms_review_reviewitem" does not exist',
+            )
+            response = self.client.get(
+                reverse("review-json-case-latest", args=[1])
+            )
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json(), {"item": None})
+
+    def test_allowed_statuses_returns_empty_on_database_error(self):
+        with patch(
+            "tcms_review.views.get_allowed_case_statuses",
+            side_effect=DatabaseError("no such table"),
+        ):
+            response = self.client.get(reverse("review-json-allowed-statuses"))
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json(), {"allowed": []})
+
+    def test_list_view_renders_empty_on_database_error(self):
+        with patch(
+            "tcms_review.views.ReviewRequest.objects",
+        ) as objects_mock:
+            objects_mock.select_related.side_effect = DatabaseError(
+                'relation "tcms_review_reviewrequest" does not exist',
+            )
+            # ReviewRequest.objects.none() still needs to work for the
+            # fallback path — wire it up on the mock.
+            objects_mock.none.return_value = ReviewRequest.objects.none()
+            response = self.client.get(reverse("review-list"))
+        self.assertEqual(response.status_code, 200)
+        self.assertTrue(response.context["db_unavailable"])

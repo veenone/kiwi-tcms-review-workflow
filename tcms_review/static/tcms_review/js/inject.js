@@ -398,63 +398,83 @@
         var $dialog = $('<div class="modal-dialog" role="document"/>');
         var $content = $('<div class="modal-content"/>');
 
-        var formAction = PLUGIN_ROOT + '/new/?' + ctx.kind + '=' + ctx.pk;
-
-        var $form = $('<form method="post"/>')
-            .attr('action', formAction);
-        $form.append('<input type="hidden" name="csrfmiddlewaretoken" value="' + getCsrfToken() + '">');
-
-        // Header
-        $form.append(
+        // Header + tab nav — two modes: start a new review, or append
+        // this case to one of the current user's already-open reviews.
+        $content.append(
             '<div class="modal-header">' +
             '  <button type="button" class="close" data-dismiss="modal" aria-label="Close"><span aria-hidden="true">&times;</span></button>' +
             '  <h4 class="modal-title">Send for review</h4>' +
+            '  <ul class="nav nav-tabs" role="tablist" style="margin-top:12px;margin-bottom:-16px;">' +
+            '    <li role="presentation" class="active"><a href="#review-send-tab-new" data-toggle="tab" role="tab">' +
+            '      <i class="fa fa-plus" aria-hidden="true"></i> New review</a></li>' +
+            '    <li role="presentation"><a href="#review-send-tab-existing" data-toggle="tab" role="tab" id="review-send-tab-existing-trigger">' +
+            '      <i class="fa fa-folder-open-o" aria-hidden="true"></i> Add to existing</a></li>' +
+            '  </ul>' +
             '</div>'
         );
 
-        // Body
-        var $body = $('<div class="modal-body"/>');
+        var $tabContent = $('<div class="tab-content"/>');
 
+        // ── Tab 1: create a new review request (existing form) ────────
+        var formAction = PLUGIN_ROOT + '/new/?' + ctx.kind + '=' + ctx.pk;
+        var $form = $('<form method="post" class="tab-pane active" id="review-send-tab-new" role="tabpanel"/>')
+            .attr('action', formAction);
+        $form.append('<input type="hidden" name="csrfmiddlewaretoken" value="' + getCsrfToken() + '">');
+
+        var $body = $('<div class="modal-body"/>');
         $body.append(
             '<div class="form-group">' +
             '  <label for="review-send-title">Title</label>' +
             '  <input type="text" name="title" id="review-send-title" class="form-control" required>' +
             '</div>'
         );
-
-        // Due date with datetimepicker
         $body.append(
             '<div class="form-group">' +
             '  <label for="review-send-due">Due date (optional)</label>' +
             '  <input type="text" name="due_date" id="review-send-due" class="form-control" autocomplete="off">' +
             '</div>'
         );
-
-        // Reviewers — user typeahead picker
         var $reviewerGroup = $('<div class="form-group"/>');
         $reviewerGroup.append('<label>Reviewers</label>');
         $reviewerGroup.append(buildUserPicker('review-send-reviewer-search', 'review-send-reviewers'));
         $body.append($reviewerGroup);
-
-        // Description
         $body.append(
             '<div class="form-group">' +
             '  <label for="review-send-description">Description (optional)</label>' +
             '  <textarea name="description" id="review-send-description" class="form-control" rows="3"></textarea>' +
             '</div>'
         );
-
         $form.append($body);
-
-        // Footer
         $form.append(
             '<div class="modal-footer">' +
             '  <button type="button" class="btn btn-default" data-dismiss="modal">Cancel</button>' +
             '  <button type="submit" class="btn btn-primary">Create review request</button>' +
             '</div>'
         );
+        $tabContent.append($form);
 
-        $content.append($form);
+        // ── Tab 2: add to an existing open review owned by the user ──
+        var $existing = $('<div class="tab-pane" id="review-send-tab-existing" role="tabpanel"/>');
+        var $existingBody = $('<div class="modal-body"/>');
+        $existingBody.append(
+            '<p class="text-muted" style="margin-bottom:12px;">' +
+            'Attach this case to one of your open review requests. ' +
+            'Only your own in-review requests are shown.</p>'
+        );
+        $existingBody.append(
+            '<div class="review-send-existing-list">' +
+            '  <div class="text-muted"><i class="fa fa-spinner fa-spin" aria-hidden="true"></i> Loading your open reviews…</div>' +
+            '</div>'
+        );
+        $existing.append($existingBody);
+        $existing.append(
+            '<div class="modal-footer">' +
+            '  <button type="button" class="btn btn-default" data-dismiss="modal">Close</button>' +
+            '</div>'
+        );
+        $tabContent.append($existing);
+
+        $content.append($tabContent);
         $dialog.append($content);
         $modal.append($dialog);
 
@@ -471,7 +491,77 @@
             }
         });
 
+        // Lazy-load the existing-reviews list the first time that tab
+        // is activated, so the modal-open path doesn't pay an RPC cost
+        // for users who only ever create new reviews.
+        var loaded = false;
+        $modal.on('shown.bs.tab', '#review-send-tab-existing-trigger', function () {
+            if (loaded) { return; }
+            loaded = true;
+            loadExistingReviewsForCase($modal, ctx);
+        });
+
         return $modal;
+    }
+
+    function loadExistingReviewsForCase($modal, ctx) {
+        var userId = getCurrentUserId();
+        var $list = $modal.find('.review-send-existing-list');
+        if (userId === null) {
+            $list.html('<div class="alert alert-warning">Could not detect the current user — please reload the page.</div>');
+            return;
+        }
+        // Mirror is_locked / cancelled logic — only IN_REVIEW is a valid
+        // target. Restrict to this user's own requests so the operator
+        // doesn't accidentally expose cases into someone else's review.
+        jsonRPC(
+            'ReviewRequest.filter',
+            { requester: userId, state: 'in_review' },
+            function (data) {
+                $list.empty();
+                if (!data || !data.length) {
+                    $list.append(
+                        '<div class="review-blank-slate" style="padding:20px;">' +
+                        '  <i class="fa fa-inbox" aria-hidden="true"></i>' +
+                        '  <p class="text-muted">You have no open review requests.<br>' +
+                        '  Switch to the <b>New review</b> tab to start one.</p>' +
+                        '</div>'
+                    );
+                    return;
+                }
+                var $ul = $('<ul class="list-group"/>');
+                $.each(data, function (i, r) {
+                    var $li = $('<li class="list-group-item"/>').css({display: 'flex', alignItems: 'center'});
+                    var $text = $('<div/>').css({flex: 1});
+                    $text.append(
+                        $('<a target="_blank" rel="noopener"/>')
+                            .attr('href', PLUGIN_ROOT + '/' + r.id + '/')
+                            .text('#' + r.id + ' · ' + r.title)
+                    );
+                    if (r.due_date) {
+                        $text.append(
+                            $('<div class="text-muted" style="font-size:12px;"/>')
+                                .text('Due ' + r.due_date.replace('T', ' ').substring(0, 16))
+                        );
+                    }
+                    var $btn = $('<button type="button" class="btn btn-primary btn-sm"/>')
+                        .html('<i class="fa fa-plus" aria-hidden="true"></i> Add this case');
+                    $btn.on('click', function () {
+                        $btn.prop('disabled', true).html('<i class="fa fa-spinner fa-spin"></i> Adding…');
+                        jsonRPC(
+                            'ReviewRequest.add_case',
+                            [r.id, parseInt(ctx.pk, 10)],
+                            function () {
+                                window.location.href = PLUGIN_ROOT + '/' + r.id + '/';
+                            }
+                        );
+                    });
+                    $li.append($text).append($btn);
+                    $ul.append($li);
+                });
+                $list.append($ul);
+            }
+        );
     }
 
     function buildSendButton(ctx) {
@@ -770,6 +860,39 @@
 
     // ─── Review detail: TestCase / TestPlan browser tabs ────────────────
 
+    // Cache for allowed case statuses + current user — fetched once per
+    // page load. Both browsers filter cases to:
+    //   - case_status.name ∈ allowed_case_statuses  (plugin config)
+    //   - author = current user                      (show only mine)
+    var _allowedStatusesPromise = null;
+    function getAllowedStatuses() {
+        if (_allowedStatusesPromise === null) {
+            _allowedStatusesPromise = $.ajax({
+                url: PLUGIN_ROOT + '/json/allowed-statuses/',
+                dataType: 'json'
+            }).then(function (resp) {
+                return (resp && resp.allowed) || [];
+            }, function () {
+                return [];
+            });
+        }
+        return _allowedStatusesPromise;
+    }
+
+    function buildBrowserCaseQuery(extra) {
+        return $.when(getAllowedStatuses()).then(function (allowed) {
+            var q = $.extend({}, extra || {});
+            if (allowed && allowed.length) {
+                q.case_status__name__in = allowed;
+            }
+            var userId = getCurrentUserId();
+            if (userId !== null) {
+                q.author = userId;
+            }
+            return q;
+        });
+    }
+
     function wireCaseBrowser() {
         var $form = $('#review-add-case-form');
         if (!$form.length) { return; }
@@ -781,30 +904,34 @@
             });
         }
 
-        // TestCase browser
+        // TestCase browser — filters by plugin-configured allowed statuses
+        // AND by current user as author.
         $('#review-case-browser-load').on('click', function () {
             var filter = $.trim($('#review-case-browser-filter').val());
-            var rpcQuery = filter ? { summary__icontains: filter } : {};
-            jsonRPC('TestCase.filter', rpcQuery, function (data) {
-                var $tbody = $('#review-case-browser-table tbody').empty();
-                if (!data || !data.length) {
-                    $tbody.append('<tr><td colspan="4" class="text-muted">No cases found</td></tr>');
-                    return;
-                }
-                $.each(data.slice(0, 50), function (i, tc) {
-                    var $row = $('<tr/>');
-                    var $addBtn = $('<button class="btn btn-xs btn-default" title="Add to review"><i class="fa fa-plus"></i></button>');
-                    $addBtn.on('click', function () { addCaseToReview(tc.id); });
-                    $row.append($('<td/>').append($addBtn));
-                    $row.append($('<td/>').text(tc.id));
-                    $row.append($('<td/>').append($('<a/>').attr('href', '/case/' + tc.id + '/').text(tc.summary)));
-                    $row.append($('<td/>').text(tc.case_status__name || tc.case_status || ''));
-                    $tbody.append($row);
+            var extra = filter ? { summary__icontains: filter } : {};
+            buildBrowserCaseQuery(extra).then(function (rpcQuery) {
+                jsonRPC('TestCase.filter', rpcQuery, function (data) {
+                    var $tbody = $('#review-case-browser-table tbody').empty();
+                    if (!data || !data.length) {
+                        $tbody.append('<tr><td colspan="4" class="text-muted">No cases match — showing only cases authored by you with allowed status.</td></tr>');
+                        return;
+                    }
+                    $.each(data.slice(0, 50), function (i, tc) {
+                        var $row = $('<tr/>');
+                        var $addBtn = $('<button class="btn btn-xs btn-default" title="Add to review"><i class="fa fa-plus"></i></button>');
+                        $addBtn.on('click', function () { addCaseToReview(tc.id); });
+                        $row.append($('<td/>').append($addBtn));
+                        $row.append($('<td/>').text(tc.id));
+                        $row.append($('<td/>').append($('<a/>').attr('href', '/case/' + tc.id + '/').text(tc.summary)));
+                        $row.append($('<td/>').text(tc.case_status__name || tc.case_status || ''));
+                        $tbody.append($row);
+                    });
                 });
             });
         });
 
-        // TestPlan browser — load plans, then expand to show cases
+        // TestPlan browser — lists plans; expanding shows cases filtered
+        // by the same allowed-statuses + author rule as the case browser.
         $('#review-plan-browser-load').on('click', function () {
             var filter = $.trim($('#review-plan-browser-filter').val());
             var rpcQuery = filter ? { name__icontains: filter } : {};
@@ -826,24 +953,26 @@
                             $nextRow.toggle();
                             return;
                         }
-                        jsonRPC('TestCase.filter', { plan: plan.id }, function (cases) {
-                            var $casesRow = $('<tr class="review-plan-cases-row"/>');
-                            var $td = $('<td colspan="4" style="padding-left:30px;"/>');
-                            if (!cases || !cases.length) {
-                                $td.append('<span class="text-muted">No cases in this plan</span>');
-                            } else {
-                                var $ul = $('<ul class="list-unstyled" style="margin:0;"/>');
-                                $.each(cases.slice(0, 50), function (j, tc) {
-                                    var $li = $('<li style="padding:2px 0;"/>');
-                                    var $btn = $('<button class="btn btn-xs btn-default" style="margin-right:6px;"><i class="fa fa-plus"></i></button>');
-                                    $btn.on('click', function () { addCaseToReview(tc.id); });
-                                    $li.append($btn).append('TC-' + tc.id + ': ' + tc.summary);
-                                    $ul.append($li);
-                                });
-                                $td.append($ul);
-                            }
-                            $casesRow.append($td);
-                            $row.after($casesRow);
+                        buildBrowserCaseQuery({ plan: plan.id }).then(function (caseQuery) {
+                            jsonRPC('TestCase.filter', caseQuery, function (cases) {
+                                var $casesRow = $('<tr class="review-plan-cases-row"/>');
+                                var $td = $('<td colspan="4" style="padding-left:30px;"/>');
+                                if (!cases || !cases.length) {
+                                    $td.append('<span class="text-muted">No matching cases in this plan — only your cases with an allowed status are shown.</span>');
+                                } else {
+                                    var $ul = $('<ul class="list-unstyled" style="margin:0;"/>');
+                                    $.each(cases.slice(0, 50), function (j, tc) {
+                                        var $li = $('<li style="padding:2px 0;"/>');
+                                        var $btn = $('<button class="btn btn-xs btn-default" style="margin-right:6px;"><i class="fa fa-plus"></i></button>');
+                                        $btn.on('click', function () { addCaseToReview(tc.id); });
+                                        $li.append($btn).append('TC-' + tc.id + ': ' + tc.summary);
+                                        $ul.append($li);
+                                    });
+                                    $td.append($ul);
+                                }
+                                $casesRow.append($td);
+                                $row.after($casesRow);
+                            });
                         });
                     });
                     $row.append($('<td/>').append($expandBtn));

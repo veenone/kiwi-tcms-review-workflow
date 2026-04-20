@@ -95,7 +95,7 @@ class ReviewStatusTransitionAdmin(SimpleHistoryAdmin):
 class WikiIntegrationConfigAdmin(SimpleHistoryAdmin):
     """Singleton admin for the external wiki integration (Outline / Confluence)."""
 
-    list_display = ("pk", "backend", "base_url", "collection_id", "updated_at")
+    list_display = ("pk", "backend", "base_url", "collection_id", "verify_ssl", "updated_at")
     readonly_fields = ("updated_at",)
     fieldsets = (
         ("Connection", {
@@ -113,6 +113,20 @@ class WikiIntegrationConfigAdmin(SimpleHistoryAdmin):
                 "&nbsp;&nbsp;• <i>PAT auth (recommended):</i> paste a Personal Access Token "
                 "into API token and leave Auth email empty.<br>"
                 "&nbsp;&nbsp;• <i>Basic auth:</i> username in Auth email, password/PAT in API token."
+            ),
+        }),
+        ("TLS", {
+            "fields": ("verify_ssl", "ca_bundle_path"),
+            "description": (
+                "<b>SSL: CERTIFICATE_VERIFY_FAILED</b> on the Test "
+                "connection? Your wiki likely has an internal / "
+                "self-signed cert. Two options:<br>"
+                "&nbsp;&nbsp;• <i>Preferred:</i> set <b>CA bundle path</b> "
+                "to an absolute PEM file the Kiwi host trusts "
+                "(e.g. <code>/etc/ssl/certs/my-org-root.pem</code>).<br>"
+                "&nbsp;&nbsp;• <i>Last resort:</i> uncheck <b>Verify "
+                "SSL</b>. This exposes the sync to MITM — use only on "
+                "a trusted internal network."
             ),
         }),
         ("Sync behavior", {

@@ -419,3 +419,18 @@
     background: #ec7a08;
     color: #fff;
 }
+
+/* Pill-style badges for state and decision — rounded ends, a bit of
+   vertical padding so the icon lines up with the label text. */
+.label.review-label-pill {
+    display: inline-block;
+    border-radius: 10em;
+    padding: 3px 10px;
+    font-weight: 600;
+    letter-spacing: 0.02em;
+    line-height: 1.4;
+}
+
+.label.review-label-pill i {
+    margin-right: 3px;
+}

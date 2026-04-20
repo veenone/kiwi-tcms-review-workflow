@@ -28,6 +28,19 @@ _UUID_RE = re.compile(
 )
 
 
+def _suppress_insecure_warning_if_unverified(verify):
+    """urllib3 spams a warning on every verify=False call. Operators
+    who chose to disable verification have already accepted the risk;
+    silence the repeat noise so logs stay readable."""
+    if verify is False:
+        try:
+            import urllib3  # noqa: WPS433
+
+            urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
+        except Exception:  # noqa: BLE001
+            pass
+
+
 class OutlineAdapter:
     """Uses Outline's documented REST API (https://getoutline.com/developers).
 
@@ -37,12 +50,16 @@ class OutlineAdapter:
     documents.create strictly requires the UUID form.
     """
 
-    def __init__(self, base_url: str, api_token: str, collection_id: str):
+    def __init__(self, base_url: str, api_token: str, collection_id: str, verify=True):
         self.base_url = base_url.rstrip("/")
         self.api_token = api_token
         self.collection_id = collection_id  # raw input (slug or UUID)
         self._resolved_uuid = None
         self.timeout = 10
+        # Either True/False or the path to a CA bundle, following the
+        # shape requests' `verify=` argument expects.
+        self.verify = verify
+        _suppress_insecure_warning_if_unverified(verify)
 
     def _post(self, endpoint: str, payload: dict) -> dict:
         import requests  # noqa: WPS433
@@ -54,7 +71,11 @@ class OutlineAdapter:
         }
         try:
             response = requests.post(
-                url, headers=headers, data=json.dumps(payload), timeout=self.timeout,
+                url,
+                headers=headers,
+                data=json.dumps(payload),
+                timeout=self.timeout,
+                verify=self.verify,
             )
         except requests.RequestException as exc:
             raise WikiSyncError(f"Outline {endpoint}: {exc}") from exc
@@ -181,12 +202,15 @@ class ConfluenceAdapter:
 
     def __init__(
         self, base_url: str, api_token: str, auth_email: str, space_key: str,
+        verify=True,
     ):
         self.base_url = base_url.rstrip("/")
         self.api_token = api_token
         self.auth_email = (auth_email or "").strip()
         self.space_key = space_key
         self.timeout = 10
+        self.verify = verify
+        _suppress_insecure_warning_if_unverified(verify)
 
     def _api_path(self, suffix: str) -> str:
         """Compose `/rest/api/{suffix}` or `/wiki/rest/api/{suffix}` depending
@@ -217,6 +241,7 @@ class ConfluenceAdapter:
                 method, url, headers=headers, auth=auth,
                 data=json.dumps(payload) if payload else None,
                 timeout=self.timeout,
+                verify=self.verify,
             )
         except requests.RequestException as exc:
             raise WikiSyncError(f"Confluence {path}: {exc}") from exc
@@ -313,6 +338,8 @@ def get_adapter(config):
     if not config or not config.is_enabled:
         return None
 
+    verify = getattr(config, "requests_verify", True)
+
     if config.backend == config.BACKEND_OUTLINE:
         if not config.api_token or not config.collection_id:
             return None
@@ -320,6 +347,7 @@ def get_adapter(config):
             base_url=config.base_url,
             api_token=config.api_token,
             collection_id=config.collection_id,
+            verify=verify,
         )
     if config.backend == config.BACKEND_CONFLUENCE:
         if not config.api_token or not config.auth_email or not config.collection_id:
@@ -329,5 +357,6 @@ def get_adapter(config):
             api_token=config.api_token,
             auth_email=config.auth_email,
             space_key=config.collection_id,
+            verify=verify,
         )
     return None

@@ -1,6 +1,21 @@
 from django.apps import AppConfig
 from django.conf import settings
-from django.db.models.signals import m2m_changed, post_save, pre_save
+from django.db.models.signals import m2m_changed, post_migrate, post_save, pre_save
+
+
+def _grant_tester_permissions_post_migrate(sender, **kwargs):
+    """Fallback grant: run after core apps have created Permission rows.
+
+    Migration 0002_add_permissions tries to force-create our permissions
+    inline, but on installs with a broken django_content_type schema
+    (legacy NOT NULL `name` column) that step no-ops. This handler
+    retries the grant after post_migrate, at which point the core
+    Django auth/contenttypes machinery has had a chance to populate
+    Permission rows (if it could).
+    """
+    from tcms_review.permissions import grant_permissions_to_groups  # noqa: WPS433
+
+    grant_permissions_to_groups()
 
 
 class ReviewConfig(AppConfig):
@@ -8,6 +23,11 @@ class ReviewConfig(AppConfig):
     verbose_name = "Test Case Review"
 
     def ready(self):
+        # Register system checks — importing the module executes the
+        # @register decorators, which plug our checks into Django's
+        # `./manage.py check` and the runserver/boot-time probe.
+        from tcms_review import checks  # noqa: F401,WPS433
+
         # Register RPC methods directly into the modernrpc registry.
         # We can't just append to MODERNRPC_METHODS_MODULES because
         # modernrpc.apps.ModernRpcConfig.ready() scans that list BEFORE
@@ -81,6 +101,11 @@ class ReviewConfig(AppConfig):
             review_signals.handle_email_item_resubmitted,
             sender=ReviewItem,
             dispatch_uid="tcms_review.email_item_resubmitted",
+        )
+        post_migrate.connect(
+            _grant_tester_permissions_post_migrate,
+            sender=self,
+            dispatch_uid="tcms_review.grant_tester_permissions_post_migrate",
         )
 
     @staticmethod

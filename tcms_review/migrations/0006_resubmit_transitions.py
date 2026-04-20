@@ -37,6 +37,11 @@ def backwards(apps, schema_editor):
 
 
 class Migration(migrations.Migration):
+    # See 0005: get_or_create on SQLite can break the outer atomic
+    # block via savepoint rollback, causing the schema_editor's PRAGMA
+    # foreign_key_check on __exit__ to raise TransactionManagementError.
+    atomic = False
+
     dependencies = [
         ("tcms_review", "0005_seed_default_transitions"),
     ]

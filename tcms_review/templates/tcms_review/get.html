@@ -42,6 +42,11 @@
                 · <a href="{% url 'review-report' review_request.pk %}" class="small">
                     <i class="fa fa-bar-chart" aria-hidden="true"></i> {% trans "View report" %}
                 </a>
+                {% if is_owner and not is_locked and review_request.state != "cancelled" %}
+                · <a href="{% url 'review-edit' review_request.pk %}" class="small">
+                    <i class="fa fa-pencil" aria-hidden="true"></i> {% trans "Edit request" %}
+                </a>
+                {% endif %}
             </p>
         </div>
 
@@ -100,7 +105,7 @@
                                     <td>{{ this_vote.comment|default:"—" }}</td>
                                     <td>{{ this_vote.voted_at|date:"Y-m-d H:i" }}</td>
                                 {% else %}
-                                    <td><span class="label label-default">{% trans "Pending" %}</span></td>
+                                    <td>{% decision_badge "pending" "Pending" %}</td>
                                     <td colspan="2" class="text-muted">{% trans "Awaiting vote" %}</td>
                                 {% endif %}
                             </tr>
@@ -127,7 +132,7 @@
     <div class="card-pf">
         <div class="card-pf-heading"><h3 class="card-pf-title">{% trans "Cases under review" %}</h3></div>
         <div class="card-pf-body">
-            {% if review_request.state != "cancelled" and not is_locked %}
+            {% if review_request.state != "cancelled" and not is_locked and is_owner %}
             <div id="review-add-case-form" data-review-pk="{{ review_request.pk }}"
                  style="margin-bottom:16px;">
 
@@ -239,6 +244,7 @@
                                 {% if is_locked %}
                                 <span class="text-muted">{% trans "Locked" %}</span>
                                 {% else %}
+                                {% if is_reviewer %}
                                 <form method="post" action="{% url 'review-item-decision' item.pk %}" class="form-inline" style="display:inline-block;">
                                     {% csrf_token %}
                                     <button name="decision" value="approved" class="btn btn-xs btn-success"
@@ -268,7 +274,9 @@
                                         title="{% trans 'Decide with a comment' %}">
                                     <i class="fa fa-commenting-o" aria-hidden="true"></i>
                                 </button>
-                                {% if item.decision == "needs_changes" or item.decision == "rejected" %}
+                                {% endif %}{# end is_reviewer — decision buttons #}
+                                {# Resubmit stays accessible for the request author (tester flow) #}
+                                {% if is_owner and item.decision == "needs_changes" or is_owner and item.decision == "rejected" %}
                                 <form method="post" action="{% url 'review-item-resubmit' item.pk %}" class="form-inline" style="display:inline-block; margin-left:4px;"
                                       data-confirm="{% trans 'Resubmit this case for re-review? The reviewer will be notified and the case status will be reset.' %}">
                                     {% csrf_token %}
@@ -280,7 +288,10 @@
                                     </button>
                                 </form>
                                 {% endif %}
+                                {% if not is_reviewer and not is_owner %}
+                                <span class="text-muted">{% trans "View only" %}</span>
                                 {% endif %}
+                                {% endif %}{# end is_locked else #}
                             </td>
                         </tr>
                         {% endfor %}

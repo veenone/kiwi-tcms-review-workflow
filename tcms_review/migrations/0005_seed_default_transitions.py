@@ -38,6 +38,13 @@ def backwards(apps, schema_editor):
 
 
 class Migration(migrations.Migration):
+    # get_or_create opens a nested savepoint; on SQLite, if the INSERT
+    # trips the unique constraint and the SAVEPOINT rollback marks the
+    # outer transaction as broken, the schema_editor's PRAGMA
+    # foreign_key_check on __exit__ raises TransactionManagementError.
+    # Running non-atomic avoids that contamination.
+    atomic = False
+
     dependencies = [
         ("tcms_review", "0004_review_config"),
     ]

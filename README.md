@@ -129,6 +129,77 @@ That's it. Kiwi auto-discovers the plugin via the `kiwitcms.plugins` entry point
 
 Restart your Kiwi process after install.
 
+### Verify the install
+
+Run the plugin's system checks against the DB your production process actually uses:
+
+```bash
+./manage.py check tcms_review
+```
+
+A clean install prints `System check identified no issues (0 silenced).` If the plugin is only partly wired up you'll see one or more warnings:
+
+| ID | Meaning | Fix |
+|---|---|---|
+| `tcms_review.W001` | Plugin tables are not present in the connected DB. | Re-run `./manage.py migrate tcms_review` after confirming the DB env vars. |
+| `tcms_review.W002` | No `tcms_review.*` rows in `auth_permission`. | Usually a stale `django_content_type` — see Troubleshooting below. |
+| `tcms_review.W003` | Standard Kiwi groups exist but lack the plugin's `view_reviewrequest` permission. | Run `./manage.py tcms_review_grant_perms`. |
+
+---
+
+## Troubleshooting
+
+Issues that can surface when installing against an existing Kiwi instance.
+
+### Migration crashes with `TransactionManagementError` on SQLite
+
+Symptom — `./manage.py migrate tcms_review` prints:
+```
+django.db.transaction.TransactionManagementError: An error occurred in
+the current transaction. You can't execute queries until the end of the
+'atomic' block.
+```
+
+Cause — nested savepoints in `create_permissions()` / `get_or_create()` flagged the outer migration transaction as broken, so SQLite's `PRAGMA foreign_key_check` cleanup fails. Since v0.7.5 the data migrations run with `atomic = False` and this should no longer occur. If you still see it on 0.7.5+, ensure your venv actually picked up the updated wheel — old `.pyc` files in `__pycache__/` can shadow the fix.
+
+### Migration crashes with `NOT NULL constraint failed: django_content_type.name`
+
+Cause — Django's `contenttypes` app still has the legacy `name` column on this database, so inserting a new content type fails the NOT NULL. The plugin no longer crashes in this case (it catches `IntegrityError` and defers the grant), but until you fix it upstream no content types (and therefore no permissions) can be created.
+
+Fix — apply Django's contenttypes migrations, or drop the column manually:
+```bash
+./manage.py migrate contenttypes
+# SQLite 3.35+ / PostgreSQL fallback if the migration won't run:
+# ALTER TABLE django_content_type DROP COLUMN name;
+```
+
+### 500s on `/reviews/*` and `/admin/*` after install
+
+Cause — almost always "migrations were applied against the wrong database." This happens when `./manage.py migrate` runs without the `KIWI_DB_*` environment variables that production gunicorn uses (falling back to the SQLite default in `tcms.settings.common`), so the real production DB never gets the plugin tables.
+
+Fix — export the env and re-run:
+```bash
+export KIWI_DB_ENGINE=django.db.backends.postgresql \
+       KIWI_DB_NAME=kiwi KIWI_DB_USER=kiwi KIWI_DB_PASSWORD=... \
+       KIWI_DB_HOST=localhost KIWI_DB_PORT=5432
+./manage.py migrate tcms_review
+```
+
+As a soft safety net, the plugin's views return `200` with an empty state (instead of `500`) when tables are missing, so a half-installed instance won't brick the rest of Kiwi.
+
+### Menu items redirect to `/login/` in a loop
+
+Cause — the user is authenticated but lacks `tcms_review.view_reviewrequest`. Django's default `permission_required` redirects to `LOGIN_URL` for both cases, hence the loop.
+
+Since v0.7.5 the plugin uses `raise_exception=True`, so unpermitted users get a clean `403`. If you're still seeing the loop on 0.7.5+, you're on an older cached copy.
+
+Fix — grant the permissions:
+```bash
+./manage.py tcms_review_grant_perms
+# or target a specific group
+./manage.py tcms_review_grant_perms --group Tester --group Leader
+```
+
 ---
 
 ## Configuration
@@ -315,7 +386,7 @@ No enforced lint yet. The code follows black/flake8 conventions.
 |---|---|
 | Kiwi TCMS | ≥ 12.0 (tested against 15.3) |
 | Python | ≥ 3.9 |
-| Django | ≥ 3.2 (tested against 5.2) |
+| Django | ≥ 4.2 (tested against 5.2) |
 | `django-simple-history` | ≥ 3.0 |
 | `django-modern-rpc` | ≥ 1.0 |
 

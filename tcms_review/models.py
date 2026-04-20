@@ -290,6 +290,22 @@ class WikiIntegrationConfig(models.Model):
         help_text="Mark the page as 'Approved' / 'Closed' when the review "
                   "reaches a terminal state.",
     )
+    verify_ssl = models.BooleanField(
+        default=True,
+        help_text="Verify the wiki server's TLS certificate. Leave on "
+                  "for public instances. Uncheck ONLY for internal "
+                  "deployments with self-signed certs — doing so also "
+                  "exposes you to MITM, so prefer providing a CA bundle "
+                  "below instead.",
+    )
+    ca_bundle_path = models.CharField(
+        max_length=512,
+        blank=True,
+        default="",
+        help_text="Absolute path to a PEM-encoded CA bundle the server "
+                  "trusts. Use this for internal wikis instead of "
+                  "disabling verification. Ignored when empty.",
+    )
     updated_at = models.DateTimeField(auto_now=True)
 
     history = HistoricalRecords(excluded_fields=["api_token"])
@@ -314,3 +330,12 @@ class WikiIntegrationConfig(models.Model):
     @property
     def is_enabled(self):
         return self.backend != self.BACKEND_DISABLED and bool(self.base_url)
+
+    @property
+    def requests_verify(self):
+        """Resolve the fields into the value expected by requests' ``verify=``
+        argument. Priority: CA bundle path (if set) → verify_ssl bool.
+        """
+        if self.ca_bundle_path:
+            return self.ca_bundle_path
+        return bool(self.verify_ssl)

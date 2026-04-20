@@ -117,7 +117,7 @@
                                     <td>{% decision_badge vote.decision vote.get_decision_display %}</td>
                                     <td>{{ vote.voted_at|date:"Y-m-d H:i" }}</td>
                                 {% else %}
-                                    <td><span class="label label-default">{% trans "Pending" %}</span></td>
+                                    <td>{% decision_badge "pending" "Pending" %}</td>
                                     <td class="text-muted">—</td>
                                 {% endif %}
                             </tr>

@@ -1,5 +1,6 @@
 from django.contrib.auth.decorators import login_required, permission_required
 from django.core.exceptions import PermissionDenied
+from django.db.utils import DatabaseError
 from django.http import HttpResponse, HttpResponseRedirect, JsonResponse
 from django.shortcuts import get_object_or_404
 from django.urls import reverse, reverse_lazy
@@ -23,7 +24,7 @@ _PENDING_LIMIT = 10
 
 
 @method_decorator(login_required, name="dispatch")
-@method_decorator(permission_required("tcms_review.view_reviewrequest"), name="dispatch")
+@method_decorator(permission_required("tcms_review.view_reviewrequest", raise_exception=True), name="dispatch")
 class List(ListView):
     model = ReviewRequest
     template_name = "tcms_review/list.html"
@@ -31,24 +32,32 @@ class List(ListView):
     paginate_by = 25
 
     def get_queryset(self):
-        qs = ReviewRequest.objects.select_related("requester").prefetch_related("reviewers")
-        state = self.request.GET.get("state")
-        if state:
-            qs = qs.filter(state=state)
-        if self.request.GET.get("mine_only"):
-            qs = qs.filter(reviewers=self.request.user)
-        return qs
+        try:
+            qs = ReviewRequest.objects.select_related("requester").prefetch_related("reviewers")
+            state = self.request.GET.get("state")
+            if state:
+                qs = qs.filter(state=state)
+            if self.request.GET.get("mine_only"):
+                qs = qs.filter(reviewers=self.request.user)
+            # Force evaluation so a missing table raises here, caught below,
+            # rather than during template rendering where it would 500.
+            list(qs[:0])
+            return qs
+        except DatabaseError:
+            self._db_unavailable = True
+            return ReviewRequest.objects.none()
 
     def get_context_data(self, **kwargs):
         ctx = super().get_context_data(**kwargs)
         ctx["state_choices"] = State.CHOICES
         ctx["selected_state"] = self.request.GET.get("state", "")
         ctx["mine_only"] = bool(self.request.GET.get("mine_only"))
+        ctx["db_unavailable"] = getattr(self, "_db_unavailable", False)
         return ctx
 
 
 @method_decorator(login_required, name="dispatch")
-@method_decorator(permission_required("tcms_review.add_reviewrequest"), name="dispatch")
+@method_decorator(permission_required("tcms_review.add_reviewrequest", raise_exception=True), name="dispatch")
 class New(CreateView):
     model = ReviewRequest
     form_class = NewReviewRequestForm
@@ -82,7 +91,7 @@ class New(CreateView):
 
 
 @method_decorator(login_required, name="dispatch")
-@method_decorator(permission_required("tcms_review.view_reviewrequest"), name="dispatch")
+@method_decorator(permission_required("tcms_review.view_reviewrequest", raise_exception=True), name="dispatch")
 class Get(DetailView):
     model = ReviewRequest
     template_name = "tcms_review/get.html"
@@ -109,8 +118,16 @@ class Get(DetailView):
 
 
 @method_decorator(login_required, name="dispatch")
-@method_decorator(permission_required("tcms_review.change_reviewrequest"), name="dispatch")
 class Edit(UpdateView):
+    """Edit a review request — title, description, due date, reviewers.
+
+    Access rule: the requester (author) can always edit their own
+    request; otherwise the user needs the ``tcms_review.change_reviewrequest``
+    permission. This lets a tester who created a request adjust
+    description / reviewers without needing the blanket change permission.
+    Approved (locked) requests are immutable regardless.
+    """
+
     model = ReviewRequest
     form_class = NewReviewRequestForm
     template_name = "tcms_review/mutable.html"
@@ -118,12 +135,21 @@ class Edit(UpdateView):
     def dispatch(self, request, *args, **kwargs):
         obj = self.get_object()
         if obj.is_locked:
-            raise PermissionDenied("This review request is approved and can no longer be modified.")
+            raise PermissionDenied(
+                "This review request is approved and can no longer be modified."
+            )
+        is_owner = obj.requester_id == request.user.pk
+        has_change = request.user.has_perm("tcms_review.change_reviewrequest")
+        if not (is_owner or has_change):
+            raise PermissionDenied(
+                "Only the requester or a user with change permission "
+                "can edit this review request."
+            )
         return super().dispatch(request, *args, **kwargs)
 
 
 @method_decorator(login_required, name="dispatch")
-@method_decorator(permission_required("tcms_review.change_reviewrequest"), name="dispatch")
+@method_decorator(permission_required("tcms_review.change_reviewrequest", raise_exception=True), name="dispatch")
 class Cancel(View):
     def post(self, request, pk):
         review_request = get_object_or_404(ReviewRequest, pk=pk)
@@ -138,7 +164,7 @@ class Cancel(View):
 
 
 @method_decorator(login_required, name="dispatch")
-@method_decorator(permission_required("tcms_review.change_reviewrequest"), name="dispatch")
+@method_decorator(permission_required("tcms_review.change_reviewrequest", raise_exception=True), name="dispatch")
 class Vote(View):
     def post(self, request, pk):
         review_request = get_object_or_404(ReviewRequest, pk=pk)
@@ -169,7 +195,7 @@ class Vote(View):
 
 
 @method_decorator(login_required, name="dispatch")
-@method_decorator(permission_required("tcms_review.change_reviewrequest"), name="dispatch")
+@method_decorator(permission_required("tcms_review.change_reviewrequest", raise_exception=True), name="dispatch")
 class ResubmitItem(View):
     """Tester-driven resubmission of a case that was previously marked
     needs_changes or rejected. Resets the item's decision to pending,
@@ -197,7 +223,7 @@ class ResubmitItem(View):
 
 
 @method_decorator(login_required, name="dispatch")
-@method_decorator(permission_required("tcms_review.change_reviewrequest"), name="dispatch")
+@method_decorator(permission_required("tcms_review.change_reviewrequest", raise_exception=True), name="dispatch")
 class ItemDecision(View):
     def post(self, request, pk):
         item = get_object_or_404(ReviewItem.objects.select_related("review_request"), pk=pk)
@@ -370,13 +396,13 @@ def _history_label(hist_record, for_decision=False, for_vote=False):
 
 
 @method_decorator(login_required, name="dispatch")
-@method_decorator(permission_required("tcms_review.view_reviewrequest"), name="dispatch")
+@method_decorator(permission_required("tcms_review.view_reviewrequest", raise_exception=True), name="dispatch")
 class Search(TemplateView):
     template_name = "tcms_review/search.html"
 
 
 @method_decorator(login_required, name="dispatch")
-@method_decorator(permission_required("tcms_review.view_reviewrequest"), name="dispatch")
+@method_decorator(permission_required("tcms_review.view_reviewrequest", raise_exception=True), name="dispatch")
 class Report(DetailView):
     model = ReviewRequest
     template_name = "tcms_review/report.html"
@@ -393,45 +419,51 @@ class Report(DetailView):
 
 
 @method_decorator(login_required, name="dispatch")
-@method_decorator(permission_required("tcms_review.view_reviewrequest"), name="dispatch")
+@method_decorator(permission_required("tcms_review.view_reviewrequest", raise_exception=True), name="dispatch")
 class PendingMineJSON(View):
     """Dashboard widget data source: requests assigned to the current user
     that are still open and haven't received their vote yet."""
 
     def get(self, request):
-        qs = (
-            ReviewRequest.objects
-            .filter(reviewers=request.user, state=State.IN_REVIEW)
-            .exclude(votes__reviewer=request.user)
-            .select_related("requester")
-            .order_by("due_date")[:_PENDING_LIMIT]
-        )
-        payload = [
-            {
-                "id": r.pk,
-                "title": r.title,
-                "url": reverse("review-get", args=[r.pk]),
-                "requester": r.requester.username,
-                "due_date": r.due_date.isoformat() if r.due_date else None,
-            }
-            for r in qs
-        ]
+        try:
+            qs = (
+                ReviewRequest.objects
+                .filter(reviewers=request.user, state=State.IN_REVIEW)
+                .exclude(votes__reviewer=request.user)
+                .select_related("requester")
+                .order_by("due_date")[:_PENDING_LIMIT]
+            )
+            payload = [
+                {
+                    "id": r.pk,
+                    "title": r.title,
+                    "url": reverse("review-get", args=[r.pk]),
+                    "requester": r.requester.username,
+                    "due_date": r.due_date.isoformat() if r.due_date else None,
+                }
+                for r in qs
+            ]
+        except DatabaseError:
+            return JsonResponse({"results": []})
         return JsonResponse({"results": payload})
 
 
 @method_decorator(login_required, name="dispatch")
-@method_decorator(permission_required("tcms_review.view_reviewrequest"), name="dispatch")
+@method_decorator(permission_required("tcms_review.view_reviewrequest", raise_exception=True), name="dispatch")
 class CaseLatestJSON(View):
     """Per-case badge data source: latest ReviewItem for a given TestCase."""
 
     def get(self, request, case_pk):
-        item = (
-            ReviewItem.objects
-            .filter(case_id=case_pk)
-            .select_related("review_request")
-            .order_by("-updated_at")
-            .first()
-        )
+        try:
+            item = (
+                ReviewItem.objects
+                .filter(case_id=case_pk)
+                .select_related("review_request")
+                .order_by("-updated_at")
+                .first()
+            )
+        except DatabaseError:
+            return JsonResponse({"item": None})
         if item is None:
             return JsonResponse({"item": None})
         r = item.review_request
@@ -452,20 +484,24 @@ class CaseLatestJSON(View):
 
 
 @method_decorator(login_required, name="dispatch")
-@method_decorator(permission_required("tcms_review.view_reviewrequest"), name="dispatch")
+@method_decorator(permission_required("tcms_review.view_reviewrequest", raise_exception=True), name="dispatch")
 class AllowedStatusesJSON(View):
     """Expose the configured allowed case statuses so the JS 'add case'
     form can warn users when a case's status doesn't qualify."""
 
     def get(self, request):
-        return JsonResponse({"allowed": get_allowed_case_statuses()})
+        try:
+            allowed = get_allowed_case_statuses()
+        except DatabaseError:
+            allowed = []
+        return JsonResponse({"allowed": allowed})
 
 
 # ─── Statistics dashboard ──────────────────────────────────────────────
 
 
 @method_decorator(login_required, name="dispatch")
-@method_decorator(permission_required("tcms_review.view_reviewrequest"), name="dispatch")
+@method_decorator(permission_required("tcms_review.view_reviewrequest", raise_exception=True), name="dispatch")
 class Stats(TemplateView):
     """Aggregate review statistics and KPIs across all requests."""
 
@@ -479,116 +515,142 @@ class Stats(TemplateView):
         from django.utils import timezone  # noqa: WPS433
 
         ctx = super().get_context_data(**kwargs)
+        ctx["db_unavailable"] = False
 
-        qs = ReviewRequest.objects.all()
-        ctx["total_requests"] = qs.count()
+        try:
+            qs = ReviewRequest.objects.all()
+            ctx["total_requests"] = qs.count()
 
-        by_state = {}
-        for value, label in State.CHOICES:
-            by_state[label] = qs.filter(state=value).count()
-        ctx["by_state"] = by_state
+            by_state = {}
+            for value, label in State.CHOICES:
+                by_state[label] = qs.filter(state=value).count()
+            ctx["by_state"] = by_state
 
-        ctx["total_votes"] = ReviewVote.objects.count()
-        ctx["total_items"] = ReviewItem.objects.count()
+            ctx["total_votes"] = ReviewVote.objects.count()
+            ctx["total_items"] = ReviewItem.objects.count()
 
-        terminal_qs = qs.filter(state__in=list(State.TERMINAL))
-        avg_duration = terminal_qs.aggregate(
-            avg=Avg(F("updated_at") - F("created_at"))
-        )["avg"]
-        ctx["avg_time_to_decision"] = avg_duration
+            terminal_qs = qs.filter(state__in=list(State.TERMINAL))
+            avg_duration = terminal_qs.aggregate(
+                avg=Avg(F("updated_at") - F("created_at"))
+            )["avg"]
+            ctx["avg_time_to_decision"] = avg_duration
 
-        top_reviewers_qs = (
-            ReviewVote.objects
-            .values("reviewer__username")
-            .annotate(vote_count=Count("pk"))
-            .order_by("-vote_count")[:10]
-        )
-        top_reviewers = list(top_reviewers_qs)
-        ctx["top_reviewers"] = top_reviewers
+            top_reviewers_qs = (
+                ReviewVote.objects
+                .values("reviewer__username")
+                .annotate(vote_count=Count("pk"))
+                .order_by("-vote_count")[:10]
+            )
+            top_reviewers = list(top_reviewers_qs)
+            ctx["top_reviewers"] = top_reviewers
 
-        top_requesters_qs = (
-            ReviewRequest.objects
-            .values("requester__username")
-            .annotate(request_count=Count("pk"))
-            .order_by("-request_count")[:10]
-        )
-        top_requesters = list(top_requesters_qs)
-        ctx["top_requesters"] = top_requesters
+            top_requesters_qs = (
+                ReviewRequest.objects
+                .values("requester__username")
+                .annotate(request_count=Count("pk"))
+                .order_by("-request_count")[:10]
+            )
+            top_requesters = list(top_requesters_qs)
+            ctx["top_requesters"] = top_requesters
 
-        # ── KPIs ──────────────────────────────────────────────────────
-        now = timezone.now()
-        window_30 = now - timedelta(days=30)
+            # ── KPIs ──────────────────────────────────────────────────
+            now = timezone.now()
+            window_30 = now - timedelta(days=30)
 
-        open_qs = qs.filter(state=State.IN_REVIEW)
-        ctx["open_requests"] = open_qs.count()
-        ctx["overdue_requests"] = open_qs.filter(due_date__lt=now).count()
+            open_qs = qs.filter(state=State.IN_REVIEW)
+            ctx["open_requests"] = open_qs.count()
+            ctx["overdue_requests"] = open_qs.filter(due_date__lt=now).count()
 
-        ctx["requests_last_30d"] = qs.filter(created_at__gte=window_30).count()
-        ctx["closed_last_30d"] = qs.filter(
-            state__in=list(State.TERMINAL), updated_at__gte=window_30,
-        ).count()
-        ctx["votes_last_30d"] = ReviewVote.objects.filter(voted_at__gte=window_30).count()
+            ctx["requests_last_30d"] = qs.filter(created_at__gte=window_30).count()
+            ctx["closed_last_30d"] = qs.filter(
+                state__in=list(State.TERMINAL), updated_at__gte=window_30,
+            ).count()
+            ctx["votes_last_30d"] = ReviewVote.objects.filter(voted_at__gte=window_30).count()
 
-        approved_count = qs.filter(state=State.APPROVED).count()
-        rejected_count = qs.filter(state=State.REJECTED).count()
-        closed = approved_count + rejected_count
-        ctx["approval_rate"] = (
-            (approved_count * 100.0 / closed) if closed else 0.0
-        )
+            approved_count = qs.filter(state=State.APPROVED).count()
+            rejected_count = qs.filter(state=State.REJECTED).count()
+            closed = approved_count + rejected_count
+            ctx["approval_rate"] = (
+                (approved_count * 100.0 / closed) if closed else 0.0
+            )
 
-        # Median time-to-decision (best effort in Python; small volumes)
-        durations = [
-            (r.updated_at - r.created_at).total_seconds()
-            for r in terminal_qs.only("created_at", "updated_at")
-        ]
-        if durations:
-            durations.sort()
-            mid = len(durations) // 2
-            if len(durations) % 2 == 0:
-                median_secs = (durations[mid - 1] + durations[mid]) / 2.0
+            # Median time-to-decision (best effort in Python; small volumes)
+            durations = [
+                (r.updated_at - r.created_at).total_seconds()
+                for r in terminal_qs.only("created_at", "updated_at")
+            ]
+            if durations:
+                durations.sort()
+                mid = len(durations) // 2
+                if len(durations) % 2 == 0:
+                    median_secs = (durations[mid - 1] + durations[mid]) / 2.0
+                else:
+                    median_secs = durations[mid]
+                ctx["median_time_to_decision"] = timedelta(seconds=int(median_secs))
             else:
-                median_secs = durations[mid]
-            ctx["median_time_to_decision"] = timedelta(seconds=int(median_secs))
-        else:
+                ctx["median_time_to_decision"] = None
+
+            fastest = terminal_qs.aggregate(
+                m=Min(F("updated_at") - F("created_at"))
+            )["m"]
+            slowest = terminal_qs.aggregate(
+                m=Max(F("updated_at") - F("created_at"))
+            )["m"]
+            ctx["fastest_decision"] = fastest
+            ctx["slowest_decision"] = slowest
+
+            # ── Chart payload (embedded as JSON) ──────────────────────
+            reviewers_for_chart = [
+                {"name": row["reviewer__username"], "count": row["vote_count"]}
+                for row in top_reviewers
+            ]
+            requesters_for_chart = [
+                {"name": row["requester__username"], "count": row["request_count"]}
+                for row in top_requesters
+            ]
+
+            daily_qs = (
+                qs.filter(created_at__gte=window_30)
+                .extra(select={"d": "date(created_at)"})
+                .values("d")
+                .annotate(count=Count("pk"))
+                .order_by("d")
+            )
+            daily = [
+                {"date": str(row["d"]), "count": row["count"]}
+                for row in daily_qs
+            ]
+
+            ctx["chart_payload_json"] = json.dumps({
+                "by_state": by_state,
+                "top_reviewers": reviewers_for_chart,
+                "top_requesters": requesters_for_chart,
+                "daily": daily,
+            })
+        except DatabaseError:
+            ctx["db_unavailable"] = True
+            ctx["total_requests"] = 0
+            ctx["by_state"] = {label: 0 for _, label in State.CHOICES}
+            ctx["total_votes"] = 0
+            ctx["total_items"] = 0
+            ctx["avg_time_to_decision"] = None
+            ctx["top_reviewers"] = []
+            ctx["top_requesters"] = []
+            ctx["open_requests"] = 0
+            ctx["overdue_requests"] = 0
+            ctx["requests_last_30d"] = 0
+            ctx["closed_last_30d"] = 0
+            ctx["votes_last_30d"] = 0
+            ctx["approval_rate"] = 0.0
             ctx["median_time_to_decision"] = None
-
-        fastest = terminal_qs.aggregate(
-            m=Min(F("updated_at") - F("created_at"))
-        )["m"]
-        slowest = terminal_qs.aggregate(
-            m=Max(F("updated_at") - F("created_at"))
-        )["m"]
-        ctx["fastest_decision"] = fastest
-        ctx["slowest_decision"] = slowest
-
-        # ── Chart payload (embedded as JSON) ──────────────────────────
-        reviewers_for_chart = [
-            {"name": row["reviewer__username"], "count": row["vote_count"]}
-            for row in top_reviewers
-        ]
-        requesters_for_chart = [
-            {"name": row["requester__username"], "count": row["request_count"]}
-            for row in top_requesters
-        ]
-
-        daily_qs = (
-            qs.filter(created_at__gte=window_30)
-            .extra(select={"d": "date(created_at)"})
-            .values("d")
-            .annotate(count=Count("pk"))
-            .order_by("d")
-        )
-        daily = [
-            {"date": str(row["d"]), "count": row["count"]}
-            for row in daily_qs
-        ]
-
-        ctx["chart_payload_json"] = json.dumps({
-            "by_state": by_state,
-            "top_reviewers": reviewers_for_chart,
-            "top_requesters": requesters_for_chart,
-            "daily": daily,
-        })
+            ctx["fastest_decision"] = None
+            ctx["slowest_decision"] = None
+            ctx["chart_payload_json"] = json.dumps({
+                "by_state": ctx["by_state"],
+                "top_reviewers": [],
+                "top_requesters": [],
+                "daily": [],
+            })
 
         return ctx
 
@@ -648,7 +710,7 @@ def _parse_date(raw):
 
 
 @method_decorator(login_required, name="dispatch")
-@method_decorator(permission_required("tcms_review.view_reviewrequest"), name="dispatch")
+@method_decorator(permission_required("tcms_review.view_reviewrequest", raise_exception=True), name="dispatch")
 class ExportSingle(View):
     """Download a single review's report as DOCX or PDF."""
 
@@ -661,7 +723,7 @@ class ExportSingle(View):
 
 
 @method_decorator(login_required, name="dispatch")
-@method_decorator(permission_required("tcms_review.view_reviewrequest"), name="dispatch")
+@method_decorator(permission_required("tcms_review.view_reviewrequest", raise_exception=True), name="dispatch")
 class ExportProduct(View):
     def get(self, request, product_pk, fmt):
         from tcms_review.exports.data import consolidated_by_product  # noqa: WPS433
@@ -673,7 +735,7 @@ class ExportProduct(View):
 
 
 @method_decorator(login_required, name="dispatch")
-@method_decorator(permission_required("tcms_review.view_reviewrequest"), name="dispatch")
+@method_decorator(permission_required("tcms_review.view_reviewrequest", raise_exception=True), name="dispatch")
 class ExportTestplan(View):
     def get(self, request, plan_pk, fmt):
         from tcms_review.exports.data import consolidated_by_testplan  # noqa: WPS433
@@ -685,7 +747,7 @@ class ExportTestplan(View):
 
 
 @method_decorator(login_required, name="dispatch")
-@method_decorator(permission_required("tcms_review.view_reviewrequest"), name="dispatch")
+@method_decorator(permission_required("tcms_review.view_reviewrequest", raise_exception=True), name="dispatch")
 class ExportTestrun(View):
     def get(self, request, run_pk, fmt):
         from tcms_review.exports.data import consolidated_by_testrun  # noqa: WPS433
@@ -697,7 +759,7 @@ class ExportTestrun(View):
 
 
 @method_decorator(login_required, name="dispatch")
-@method_decorator(permission_required("tcms_review.view_reviewrequest"), name="dispatch")
+@method_decorator(permission_required("tcms_review.view_reviewrequest", raise_exception=True), name="dispatch")
 class ReportHub(TemplateView):
     """Landing page for consolidated exports — pick product/plan/run + date range."""
 

@@ -26,11 +26,29 @@ class ViewPermissionEnforcement(TestCase):
         self.assertEqual(response.status_code, 302)
 
     def test_user_without_view_permission_gets_forbidden(self):
+        """Authenticated user lacking the perm gets a 403, NOT a redirect.
+
+        Regression guard: without raise_exception=True on the view's
+        permission_required decorator, Django would 302 the user to
+        LOGIN_URL — producing an infinite login loop for already-logged-
+        in users because they just authenticated.
+        """
         user = UserFactory()
         # No permissions assigned — default user has no review.* perms
         self.client.force_login(user)
         response = self.client.get(reverse("review-list"))
-        self.assertIn(response.status_code, (302, 403))
+        self.assertEqual(response.status_code, 403)
+
+    def test_user_without_view_permission_does_not_redirect_to_login(self):
+        """Paired check on the three views most visible from the menu."""
+        user = UserFactory()
+        self.client.force_login(user)
+        for urlname in ("review-list", "review-stats", "review-report-hub"):
+            response = self.client.get(reverse(urlname))
+            self.assertEqual(
+                response.status_code, 403,
+                msg=f"{urlname} redirected instead of returning 403",
+            )
 
     def test_user_with_view_permission_can_list(self):
         user = UserFactory()
