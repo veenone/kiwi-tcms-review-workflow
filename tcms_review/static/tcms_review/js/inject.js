@@ -634,6 +634,86 @@
             });
     }
 
+    // ─── Review detail page: decide with comment ──────────────────────
+
+    function ensureItemCommentModal() {
+        var $modal = $('#review-item-comment-modal');
+        if ($modal.length) { return $modal; }
+        $modal = $(
+            '<div class="modal fade" id="review-item-comment-modal" tabindex="-1" role="dialog" aria-labelledby="review-item-comment-title">' +
+            '  <div class="modal-dialog" role="document">' +
+            '    <div class="modal-content">' +
+            '      <form method="post" class="form-horizontal">' +
+            '        <input type="hidden" name="csrfmiddlewaretoken">' +
+            '        <div class="modal-header">' +
+            '          <button type="button" class="close" data-dismiss="modal" aria-label="Close"><span aria-hidden="true">&times;</span></button>' +
+            '          <h4 class="modal-title" id="review-item-comment-title">' +
+            '            <i class="fa fa-commenting-o" aria-hidden="true"></i> Decide with a comment' +
+            '          </h4>' +
+            '          <p class="modal-subtitle text-muted" style="margin:4px 0 0;"></p>' +
+            '        </div>' +
+            '        <div class="modal-body">' +
+            '          <div class="form-group">' +
+            '            <label class="col-sm-3 control-label">Decision</label>' +
+            '            <div class="col-sm-9 review-item-comment-radios">' +
+            '              <label class="radio-inline"><input type="radio" name="decision" value="approved"> <i class="pficon pficon-ok text-success"></i> Approve</label>' +
+            '              <label class="radio-inline"><input type="radio" name="decision" value="needs_changes"> <i class="pficon pficon-warning-triangle-o text-warning"></i> Needs changes</label>' +
+            '              <label class="radio-inline"><input type="radio" name="decision" value="rejected"> <i class="pficon pficon-error-circle-o text-danger"></i> Reject</label>' +
+            '              <label class="radio-inline"><input type="radio" name="decision" value="pending"> <i class="fa fa-hourglass-half"></i> Pending</label>' +
+            '            </div>' +
+            '          </div>' +
+            '          <div class="form-group">' +
+            '            <label for="review-item-comment-text" class="col-sm-3 control-label">Comment</label>' +
+            '            <div class="col-sm-9">' +
+            '              <textarea id="review-item-comment-text" name="comment" class="form-control" rows="4" placeholder="Add a note explaining your decision (optional)"></textarea>' +
+            '              <p class="help-block">Shown in the case row, the activity feed, and the wiki page (if wiki sync is enabled).</p>' +
+            '            </div>' +
+            '          </div>' +
+            '        </div>' +
+            '        <div class="modal-footer">' +
+            '          <button type="button" class="btn btn-default" data-dismiss="modal">Cancel</button>' +
+            '          <button type="submit" class="btn btn-primary"><i class="fa fa-save"></i> Save decision</button>' +
+            '        </div>' +
+            '      </form>' +
+            '    </div>' +
+            '  </div>' +
+            '</div>'
+        );
+        $('body').append($modal);
+        return $modal;
+    }
+
+    function wireItemCommentModal() {
+        // Any button tagged with the review-item-decide-with-comment class
+        // (rendered from get.html per case) opens the shared modal.
+        $(document).on('click', '.review-item-decide-with-comment', function () {
+            var $btn = $(this);
+            var $modal = ensureItemCommentModal();
+            var $form = $modal.find('form');
+
+            // Fill the form from the button's data-* attributes.
+            $form.attr('action', $btn.data('url'));
+            $form.find('input[name=csrfmiddlewaretoken]').val(getCsrfToken());
+
+            var currentDecision = $btn.data('item-decision') || 'pending';
+            $form.find('input[name=decision]').prop('checked', false);
+            $form.find('input[name=decision][value="' + currentDecision + '"]')
+                .prop('checked', true);
+
+            $form.find('textarea[name=comment]').val($btn.data('item-comment') || '');
+
+            $modal.find('.modal-subtitle').text(
+                'TC-' + $btn.data('item-case-id') + ' — ' +
+                ($btn.data('item-case-summary') || '')
+            );
+
+            $modal.modal('show');
+            setTimeout(function () {
+                $form.find('textarea[name=comment]').focus();
+            }, 250);
+        });
+    }
+
     // ─── Review detail page: add test case ────────────────────────────
 
     function wireAddCaseForm() {
@@ -887,6 +967,7 @@
         wireCaseBrowser();
         wireActivityFeed();
         wireReportHubExports();
+        wireItemCommentModal();
         initDatePickers();
 
         var ctx = detectPageContext();

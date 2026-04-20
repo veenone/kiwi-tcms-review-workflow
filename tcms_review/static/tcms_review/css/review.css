@@ -98,6 +98,25 @@
     margin-left: 0;
 }
 
+.review-cases-table .review-item-actions .review-item-decide-with-comment {
+    margin-left: 4px;
+}
+
+#review-item-comment-modal .modal-title .fa,
+#review-item-comment-modal .modal-title .pficon {
+    margin-right: 4px;
+}
+
+#review-item-comment-modal .modal-subtitle {
+    font-size: 12px;
+    font-style: italic;
+}
+
+#review-item-comment-modal .review-item-comment-radios .radio-inline {
+    margin-right: 14px;
+    margin-bottom: 4px;
+}
+
 /* User typeahead picker — anchor the popup to the input, not the modal. */
 .review-user-picker {
     position: relative;

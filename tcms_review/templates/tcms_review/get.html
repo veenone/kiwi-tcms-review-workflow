@@ -218,6 +218,7 @@
                             <th style="width: 70px;">#</th>
                             <th>{% trans "Summary" %}</th>
                             <th style="width: 160px;">{% trans "Decision" %}</th>
+                            <th>{% trans "Comment" %}</th>
                             <th style="width: 280px;">{% trans "Actions" %}</th>
                         </tr>
                     </thead>
@@ -227,6 +228,13 @@
                             <td>{{ item.case.pk }}</td>
                             <td>{{ item.case.summary }}</td>
                             <td>{% decision_badge item.decision item.get_decision_display %}</td>
+                            <td>
+                                {% if item.comment %}
+                                    <span class="review-item-comment text-muted">{{ item.comment|truncatechars:140 }}</span>
+                                {% else %}
+                                    <span class="text-muted">—</span>
+                                {% endif %}
+                            </td>
                             <td class="review-item-actions">
                                 {% if is_locked %}
                                 <span class="text-muted">{% trans "Locked" %}</span>
@@ -234,18 +242,32 @@
                                 <form method="post" action="{% url 'review-item-decision' item.pk %}" class="form-inline" style="display:inline-block;">
                                     {% csrf_token %}
                                     <button name="decision" value="approved" class="btn btn-xs btn-success"
-                                            aria-label="{% trans 'Approve case' %}">
+                                            aria-label="{% trans 'Approve case' %}"
+                                            title="{% trans 'Approve without comment' %}">
                                         <i class="pficon pficon-ok" aria-hidden="true"></i>
                                     </button>
                                     <button name="decision" value="needs_changes" class="btn btn-xs btn-warning"
-                                            aria-label="{% trans 'Request changes on case' %}">
+                                            aria-label="{% trans 'Request changes on case' %}"
+                                            title="{% trans 'Request changes without comment' %}">
                                         <i class="pficon pficon-warning-triangle-o" aria-hidden="true"></i>
                                     </button>
                                     <button name="decision" value="rejected" class="btn btn-xs btn-danger"
-                                            aria-label="{% trans 'Reject case' %}">
+                                            aria-label="{% trans 'Reject case' %}"
+                                            title="{% trans 'Reject without comment' %}">
                                         <i class="pficon pficon-error-circle-o" aria-hidden="true"></i>
                                     </button>
                                 </form>
+                                <button type="button" class="btn btn-xs btn-default review-item-decide-with-comment"
+                                        data-item-pk="{{ item.pk }}"
+                                        data-item-case-id="{{ item.case.pk }}"
+                                        data-item-case-summary="{{ item.case.summary }}"
+                                        data-item-decision="{{ item.decision }}"
+                                        data-item-comment="{{ item.comment|default:'' }}"
+                                        data-url="{% url 'review-item-decision' item.pk %}"
+                                        aria-label="{% trans 'Decide with a comment' %}"
+                                        title="{% trans 'Decide with a comment' %}">
+                                    <i class="fa fa-commenting-o" aria-hidden="true"></i>
+                                </button>
                                 {% if item.decision == "needs_changes" or item.decision == "rejected" %}
                                 <form method="post" action="{% url 'review-item-resubmit' item.pk %}" class="form-inline" style="display:inline-block; margin-left:4px;"
                                       data-confirm="{% trans 'Resubmit this case for re-review? The reviewer will be notified and the case status will be reset.' %}">
