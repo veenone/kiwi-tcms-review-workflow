@@ -1,27 +1,82 @@
 """Signal handlers wired in apps.py::ready().
 
-Sends notification emails using Kiwi's mailto helper. All Kiwi imports are
-lazy so apps.py never pulls tcms.* at module load time.
+Sends notification emails best-effort. All Kiwi imports are lazy so apps.py
+never pulls tcms.* at module load time.
 """
+import logging
+import threading
+
+from django.conf import settings
+from django.core.mail import send_mail
 from django.db.models.signals import m2m_changed, post_save, pre_save
+from django.template.loader import render_to_string
 from django.urls import reverse
 from django.utils.translation import gettext_lazy as _
+from django.utils.translation import override
 
 from tcms_review.conf import get_status_transitions
 from tcms_review.state_machine import State
 
 _PRE_SAVE_STATE_ATTR = "_tcms_review_previous_state"
+_EMAIL_LOGGER = logging.getLogger("tcms_review.email")
+
+
+def _remove_invalid_address(address):
+    """Honour operator-configured EMAIL_VALIDATORS when Kiwi exposes them,
+    otherwise accept every non-empty address."""
+    try:
+        from tcms.core.utils.mailto import remove_invalid_address  # noqa: WPS433
+    except ImportError:
+        return bool(address)
+    return remove_invalid_address(address)
 
 
 def _mailto(template_name, subject, recipients, context):
-    """Lazy-import Kiwi's mail helper to keep startup decoupled."""
-    from tcms.core.utils.mailto import mailto  # noqa: WPS433
-    mailto(
-        template_name=template_name,
-        subject=subject,
-        recipients=recipients,
-        context=context,
-    )
+    """Fire-and-forget notification sender.
+
+    Mirrors `tcms.core.utils.mailto.mailto` (subject sanitisation, recipient
+    dedup, EMAIL_VALIDATORS filter, DEBUG ADMINS cc, EMAIL_SUBJECT_PREFIX)
+    but runs send_mail inside a guarded daemon thread so SMTP errors don't
+    escape to Python's default thread excepthook and spam the server log.
+    """
+    with override(settings.LANGUAGE_CODE):
+        clean_subject = subject.replace("\n", " ").replace("\r", " ")
+
+        if isinstance(recipients, list):
+            recipients = sorted(set(recipients))
+        else:
+            recipients = [recipients]
+
+        if settings.DEBUG:
+            for _admin_name, admin_email in settings.ADMINS:
+                recipients.append(admin_email)
+
+        recipients = list(filter(_remove_invalid_address, recipients))
+        if not recipients:
+            return
+
+        try:
+            body = render_to_string(template_name, context) if template_name else context
+        except Exception as exc:  # noqa: BLE001 — log and drop, never bubble
+            _EMAIL_LOGGER.warning("email template render failed: %s", exc)
+            return
+
+        full_subject = settings.EMAIL_SUBJECT_PREFIX + clean_subject
+        sender = settings.DEFAULT_FROM_EMAIL
+
+    def _runner():
+        try:
+            send_mail(
+                full_subject,
+                body,
+                sender,
+                recipients,
+                fail_silently=True,
+            )
+        except Exception as exc:  # noqa: BLE001 — log and drop, never bubble
+            _EMAIL_LOGGER.warning("send_mail failed: %s", exc)
+
+    threading.Thread(target=_runner, daemon=True).start()
 
 
 def _absolute_url(request):
@@ -239,13 +294,11 @@ def handle_testcase_status_transition(sender, instance, created, **kwargs):
 def _fire_wiki_sync(fn, *args, **kwargs):
     """Run a wiki call in a daemon thread so the HTTP round-trip never
     blocks the request cycle. Mirrors the pattern Kiwi uses for mailto."""
-    import threading  # noqa: WPS433
 
     def _runner():
         try:
             fn(*args, **kwargs)
         except Exception:  # noqa: BLE001 — log everything, never bubble
-            import logging  # noqa: WPS433
             logging.getLogger("tcms_review.wiki").exception(
                 "Wiki sync failed for %s", fn.__name__,
             )

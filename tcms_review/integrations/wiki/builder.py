@@ -175,9 +175,6 @@ def _build_top_section(review_request) -> list[str]:
 # ─── Changelog reconstructed from HistoricalRecords ──────────────────
 
 
-CHANGELOG_MARKER = "<!-- kiwitcms-review:changelog -->"
-
-
 def _history_user(h) -> str:
     u = getattr(h, "history_user", None)
     if u is None:
@@ -399,8 +396,6 @@ def _build_changelog_section(review_request) -> list[str]:
 
     lines = [
         "---",
-        "",
-        CHANGELOG_MARKER,
         "",
         "## Activity log",
         "",
