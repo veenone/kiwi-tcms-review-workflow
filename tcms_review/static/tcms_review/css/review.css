@@ -1,72 +1,352 @@
-/* kiwitcms-review plugin styles. Lives alongside Kiwi's PatternFly stylesheet. */
+/* kiwitcms-review — Test Lab UI
+ *
+ * Lives alongside Kiwi's PatternFly stylesheet. All rules below are
+ * scoped to plugin pages (every selector starts with one of the
+ * `.review-*` namespaced classes, the `.container-cards-pf` wrapper,
+ * or an `#review-*` id) so the sheet cannot leak onto unrelated Kiwi
+ * pages.
+ *
+ * Aesthetic matches the rest of the plugin family (kiwi-tcms-admin-overlay
+ * v0.1.0, kiwitcms-requirements v0.4.3, tcms-test-browser v1.2.0):
+ *   - warm paper / ink palette, moss-green brand accent
+ *   - system-stack typography (no CDN font load)
+ *   - mono uppercase data headers, hairline rules between rows
+ *   - instrument-pill badges with a leading 3px tone bar
+ *   - moss focus-glow on inputs
+ *   - prefers-reduced-motion guard
+ *
+ * Every previously-exposed class name + id is kept stable so the
+ * existing templates and JS continue working without modification.
+ */
+
+/* ─── Tokens (scoped to plugin pages) ──────────────────────────── */
+
+.container-cards-pf,
+.review-page,
+[data-review-page] {
+    --rv-font-sans: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
+                    "Helvetica Neue", Arial, sans-serif;
+    --rv-font-mono: ui-monospace, "SF Mono", Menlo, Monaco, Consolas,
+                    "Liberation Mono", "Courier New", monospace;
+
+    --rv-ink: #0d0e0c;
+    --rv-ink-soft: #3a3b35;
+    --rv-ink-mute: #6f7068;
+    --rv-paper: #f7f5ef;
+    --rv-paper-raised: #ffffff;
+    --rv-paper-sunken: #efebe0;
+    --rv-rule: rgba(13, 14, 12, 0.08);
+    --rv-rule-strong: rgba(13, 14, 12, 0.16);
+
+    --rv-moss: #4a7c2a;
+    --rv-moss-deep: #2f5318;
+    --rv-moss-soft: #e3ecd2;
+
+    --rv-pass: #3d7c0f;
+    --rv-fail: #b8270c;
+    --rv-skip: #a06a00;
+    --rv-info: #1f5582;
+
+    --rv-radius: 4px;
+    --rv-radius-lg: 6px;
+    --rv-ease: cubic-bezier(0.2, 0.7, 0.2, 1);
+
+    color: var(--rv-ink);
+}
+
+/* ─── Aggregate status cards (top of list/dashboard pages) ────── */
 
 .review-aggregate {
     display: flex;
     flex-wrap: wrap;
     gap: 12px;
-    margin-bottom: 16px;
+    margin-bottom: 20px;
 }
 
 .review-aggregate .aggregate-status-pf {
-    flex: 1 1 160px;
-    min-width: 140px;
-    border: 1px solid #ededed;
-    border-radius: 3px;
-    padding: 12px 16px;
-    background: #fff;
+    flex: 1 1 180px;
+    min-width: 160px;
+    background: var(--rv-paper-raised);
+    border: 1px solid var(--rv-rule);
+    border-radius: var(--rv-radius-lg);
+    padding: 16px 20px;
+    position: relative;
+    transition: border-color 160ms var(--rv-ease),
+                box-shadow 160ms var(--rv-ease);
+}
+.review-aggregate .aggregate-status-pf::before {
+    content: "";
+    position: absolute;
+    left: 0;
+    top: 16px;
+    bottom: 16px;
+    width: 2px;
+    background: var(--rv-moss);
+    border-radius: 0 2px 2px 0;
+}
+.review-aggregate .aggregate-status-pf:hover {
+    box-shadow: 0 4px 14px rgba(13, 14, 12, 0.06);
+    border-color: var(--rv-rule-strong);
 }
 
 .review-aggregate .aggregate-status-pf-title {
-    font-size: 13px;
-    color: #72767b;
+    font-family: var(--rv-font-mono);
+    font-size: 10px;
+    font-weight: 500;
     text-transform: uppercase;
-    letter-spacing: 0.04em;
-    margin-bottom: 4px;
+    letter-spacing: 0.14em;
+    color: var(--rv-ink-mute);
+    margin: 0 0 8px;
 }
 
 .review-aggregate .aggregate-status-pf-count {
-    font-size: 24px;
-    font-weight: 300;
-    color: #292e34;
-    line-height: 1.1;
+    font-family: var(--rv-font-mono);
+    font-size: 28px;
+    font-weight: 400;
+    line-height: 1;
+    letter-spacing: -0.02em;
+    color: var(--rv-ink);
+    font-variant-numeric: tabular-nums;
 }
 
 .review-aggregate .aggregate-status-pf-notification {
-    font-size: 12px;
-    color: #9c9c9c;
+    font-family: var(--rv-font-mono);
+    font-size: 11px;
+    color: var(--rv-ink-mute);
+    margin-top: 8px;
+    font-variant-numeric: tabular-nums;
 }
+
+@media (max-width: 767px) {
+    .review-aggregate .aggregate-status-pf {
+        flex-basis: 100%;
+    }
+}
+
+/* ─── Cards (PatternFly card-pf override) ─────────────────────── */
+
+.container-cards-pf .card-pf,
+.review-pending-card {
+    background: var(--rv-paper-raised);
+    border: 1px solid var(--rv-rule);
+    border-radius: var(--rv-radius-lg);
+    box-shadow: 0 1px 3px rgba(13, 14, 12, 0.04);
+    margin-bottom: 16px;
+}
+
+.container-cards-pf .card-pf-heading {
+    background: var(--rv-paper-sunken);
+    border-bottom: 1px solid var(--rv-rule);
+    padding: 10px 16px;
+    border-radius: var(--rv-radius-lg) var(--rv-radius-lg) 0 0;
+}
+
+.container-cards-pf .card-pf-title {
+    font-family: var(--rv-font-mono);
+    font-size: 11px;
+    font-weight: 500;
+    text-transform: uppercase;
+    letter-spacing: 0.12em;
+    color: var(--rv-ink-mute);
+    margin: 0;
+    line-height: 1.6;
+}
+
+.container-cards-pf .card-pf-body {
+    padding: 16px 20px;
+}
+
+/* ─── Tables ─────────────────────────────────────────────────── */
+
+.container-cards-pf .table,
+.review-cases-table,
+.review-pending-card .table {
+    background: var(--rv-paper-raised);
+    border-collapse: collapse;
+    border-spacing: 0;
+    margin-bottom: 0;
+    font-size: 13px;
+    color: var(--rv-ink);
+    font-family: var(--rv-font-sans);
+}
+
+.container-cards-pf .table thead th,
+.review-cases-table thead th {
+    background: var(--rv-paper-sunken);
+    border: 0;
+    border-bottom: 1px solid var(--rv-rule-strong);
+    padding: 10px 14px;
+    font-family: var(--rv-font-mono);
+    font-size: 10px;
+    font-weight: 500;
+    text-transform: uppercase;
+    letter-spacing: 0.12em;
+    color: var(--rv-ink-mute);
+    text-align: left;
+    white-space: nowrap;
+}
+
+.container-cards-pf .table tbody td,
+.review-cases-table tbody td {
+    background: transparent;
+    border: 0;
+    border-bottom: 1px solid var(--rv-rule);
+    padding: 9px 14px;
+    color: var(--rv-ink);
+    vertical-align: middle;
+    font-variant-numeric: tabular-nums;
+}
+
+/* Disable Bootstrap's table-striped — hairlines are enough */
+.container-cards-pf .table-striped > tbody > tr:nth-of-type(odd) > td,
+.container-cards-pf .table-striped > tbody > tr:nth-of-type(even) > td {
+    background: transparent;
+}
+
+.container-cards-pf .table-hover > tbody > tr:hover > td,
+.review-cases-table tbody tr:hover td {
+    background: var(--rv-paper-sunken);
+}
+
+.container-cards-pf .table tbody tr:last-child td,
+.review-cases-table tbody tr:last-child td {
+    border-bottom: 0;
+}
+
+.container-cards-pf .table a,
+.review-cases-table a {
+    color: var(--rv-ink);
+    text-decoration: none;
+    border-bottom: 1px solid transparent;
+    transition: color 120ms var(--rv-ease), border-color 120ms var(--rv-ease);
+}
+.container-cards-pf .table a:hover,
+.review-cases-table a:hover {
+    color: var(--rv-moss-deep);
+    border-bottom-color: var(--rv-moss);
+}
+
+/* ─── Form controls ──────────────────────────────────────────── */
+
+.container-cards-pf .form-control,
+.review-page .form-control {
+    background: var(--rv-paper-raised);
+    border: 1px solid var(--rv-rule-strong);
+    border-radius: var(--rv-radius);
+    box-shadow: none;
+    font-family: var(--rv-font-sans);
+    font-size: 13px;
+    color: var(--rv-ink);
+    padding: 6px 10px;
+    height: auto;
+    transition: border-color 140ms var(--rv-ease), box-shadow 140ms var(--rv-ease);
+}
+.container-cards-pf .form-control:focus,
+.review-page .form-control:focus {
+    border-color: var(--rv-moss);
+    box-shadow: 0 0 0 3px var(--rv-moss-soft);
+    outline: none;
+}
+
+/* ─── Buttons ────────────────────────────────────────────────── */
+
+.container-cards-pf .btn,
+.review-page .btn,
+.review-cases-table .btn,
+.review-activity-thread .btn {
+    border-radius: var(--rv-radius);
+    font-family: var(--rv-font-sans);
+    font-size: 12px;
+    font-weight: 500;
+    padding: 6px 14px;
+    transition: background 140ms var(--rv-ease), border-color 140ms var(--rv-ease),
+                color 140ms var(--rv-ease);
+}
+.container-cards-pf .btn-default,
+.review-page .btn-default {
+    background: var(--rv-paper-raised);
+    border: 1px solid var(--rv-rule-strong);
+    color: var(--rv-ink);
+}
+.container-cards-pf .btn-default:hover,
+.review-page .btn-default:hover {
+    background: var(--rv-moss-soft);
+    border-color: var(--rv-moss);
+    color: var(--rv-moss-deep);
+}
+.container-cards-pf .btn-primary,
+.review-page .btn-primary {
+    background: var(--rv-moss-deep);
+    border: 1px solid var(--rv-moss-deep);
+    color: var(--rv-paper-raised);
+}
+.container-cards-pf .btn-primary:hover,
+.review-page .btn-primary:hover {
+    background: var(--rv-moss);
+    border-color: var(--rv-moss);
+}
+.container-cards-pf .btn-danger,
+.review-page .btn-danger {
+    background: transparent;
+    border: 1px solid var(--rv-rule-strong);
+    color: var(--rv-fail);
+}
+.container-cards-pf .btn-danger:hover,
+.review-page .btn-danger:hover {
+    background: rgba(184, 39, 12, 0.08);
+    border-color: var(--rv-fail);
+    color: var(--rv-fail);
+}
+.container-cards-pf .btn-link,
+.review-page .btn-link {
+    color: var(--rv-ink-soft);
+}
+.container-cards-pf .btn-link:hover,
+.review-page .btn-link:hover {
+    color: var(--rv-moss-deep);
+}
+
+/* ─── Blank slate ────────────────────────────────────────────── */
 
 .review-blank-slate {
     text-align: center;
-    padding: 36px 12px;
-    color: #72767b;
+    padding: 48px 16px;
+    color: var(--rv-ink-soft);
 }
 
 .review-blank-slate .pficon,
 .review-blank-slate .fa {
-    font-size: 48px;
-    color: #bbbbbb;
-    margin-bottom: 12px;
+    font-size: 44px;
+    color: var(--rv-ink-mute);
+    margin-bottom: 16px;
+    opacity: 0.55;
 }
 
 .review-blank-slate h3 {
-    margin-top: 0;
-    margin-bottom: 8px;
-    font-weight: 400;
-    color: #292e34;
+    margin: 0 0 10px;
+    font-family: var(--rv-font-sans);
+    font-weight: 600;
+    font-size: 18px;
+    color: var(--rv-ink);
 }
 
 .review-blank-slate p {
-    margin: 0 0 16px;
+    font-family: var(--rv-font-sans);
+    font-size: 14px;
+    color: var(--rv-ink-soft);
+    margin: 0 0 20px;
+    line-height: 1.5;
 }
+
+/* ─── Sticky actions bar at bottom of get/mutable pages ─────── */
 
 .review-actions-bar {
     position: sticky;
     bottom: 0;
-    background: #fff;
-    border-top: 1px solid #ededed;
+    background: var(--rv-paper-raised);
+    border-top: 1px solid var(--rv-rule-strong);
     padding: 12px 0;
-    margin-top: 24px;
+    margin-top: 28px;
     z-index: 5;
 }
 
@@ -74,15 +354,29 @@
     margin-left: 8px;
 }
 
+/* ─── Vote radios ────────────────────────────────────────────── */
+
 .review-vote-radio {
     display: inline-flex;
     align-items: center;
-    margin-right: 16px;
+    gap: 6px;
+    margin-right: 18px;
     cursor: pointer;
+    padding: 6px 10px;
+    border: 1px solid transparent;
+    border-radius: var(--rv-radius);
+    transition: background 140ms var(--rv-ease), border-color 140ms var(--rv-ease);
+}
+
+.review-vote-radio:has(input:checked) {
+    background: var(--rv-moss-soft);
+    border-color: var(--rv-moss);
+    color: var(--rv-moss-deep);
 }
 
 .review-vote-radio input[type="radio"] {
-    margin-right: 6px;
+    margin-right: 4px;
+    accent-color: var(--rv-moss);
 }
 
 .review-vote-radio .pficon,
@@ -90,8 +384,12 @@
     margin-right: 4px;
 }
 
+/* ─── Cases table — actions cluster ──────────────────────────── */
+
 .review-cases-table .review-item-actions .btn {
     margin-right: 4px;
+    padding: 4px 10px;
+    font-size: 11px;
 }
 
 .review-cases-table .review-item-actions .btn + .btn {
@@ -102,22 +400,50 @@
     margin-left: 4px;
 }
 
+/* ─── Comment modal ──────────────────────────────────────────── */
+
+#review-item-comment-modal .modal-content,
+#review-error-modal .modal-content,
+#review-confirm-modal .modal-content {
+    background: var(--rv-paper-raised);
+    border-radius: var(--rv-radius-lg);
+    border: 1px solid var(--rv-rule-strong);
+    box-shadow: 0 14px 60px rgba(13, 14, 12, 0.30);
+}
+
+#review-item-comment-modal .modal-header {
+    background: var(--rv-paper-sunken);
+    border-bottom: 1px solid var(--rv-rule);
+    border-radius: var(--rv-radius-lg) var(--rv-radius-lg) 0 0;
+}
+
+#review-item-comment-modal .modal-title {
+    font-family: var(--rv-font-sans);
+    font-size: 16px;
+    font-weight: 600;
+    color: var(--rv-ink);
+}
+
 #review-item-comment-modal .modal-title .fa,
 #review-item-comment-modal .modal-title .pficon {
-    margin-right: 4px;
+    margin-right: 6px;
+    color: var(--rv-moss);
 }
 
 #review-item-comment-modal .modal-subtitle {
+    font-family: var(--rv-font-sans);
     font-size: 12px;
-    font-style: italic;
+    color: var(--rv-ink-mute);
+    font-style: normal;
 }
 
 #review-item-comment-modal .review-item-comment-radios .radio-inline {
-    margin-right: 14px;
-    margin-bottom: 4px;
+    margin-right: 16px;
+    margin-bottom: 6px;
 }
 
-/* User typeahead picker — anchor the popup to the input, not the modal. */
+/* ─── User typeahead picker ──────────────────────────────────── */
+
 .review-user-picker {
     position: relative;
 }
@@ -132,14 +458,26 @@
     max-height: 240px;
     overflow-y: auto;
     z-index: 1060;
+    background: var(--rv-paper-raised);
+    border: 1px solid var(--rv-rule-strong);
+    border-radius: var(--rv-radius);
+    box-shadow: 0 8px 24px rgba(13, 14, 12, 0.12);
 }
 
 .review-user-picker .review-user-results > li > a {
     display: block;
-    padding: 6px 12px;
+    padding: 7px 12px;
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
+    color: var(--rv-ink);
+    font-family: var(--rv-font-sans);
+    font-size: 13px;
+}
+.review-user-picker .review-user-results > li > a:hover,
+.review-user-picker .review-user-results > li.active > a {
+    background: var(--rv-moss-soft);
+    color: var(--rv-moss-deep);
 }
 
 .review-user-tags .label {
@@ -148,122 +486,214 @@
     margin-bottom: 4px;
 }
 
-/* Pill-style state and decision badges — override the default Bootstrap
-   square labels used by {% state_badge %} and {% decision_badge %}. */
+/* ─── Pill-style state + decision badges ─────────────────────── */
+
 .label[role="status"],
 .review-cases-table .label,
 .review-activity-thread .label,
 .review-activity-thread-meta .label,
-.review-pending-card .label {
-    font-size: 12px;
-    padding: 3px 10px;
-    line-height: 1.4;
-    border-radius: 10em;
+.review-pending-card .label,
+.label.review-label-pill {
+    display: inline-flex;
+    align-items: stretch;
+    font-family: var(--rv-font-mono);
+    font-size: 10px;
     font-weight: 500;
-    letter-spacing: 0.02em;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    border-radius: 2px;
+    background: var(--rv-paper-sunken);
+    color: var(--rv-ink-soft);
+    padding: 0;
+    overflow: hidden;
+    line-height: 1.4;
 }
 
-@media (max-width: 767px) {
-    .review-aggregate .aggregate-status-pf {
-        flex-basis: 100%;
-    }
+.label[role="status"]::before,
+.review-cases-table .label::before,
+.review-activity-thread .label::before,
+.review-pending-card .label::before,
+.label.review-label-pill::before {
+    content: "";
+    width: 3px;
+    background: var(--rv-ink-mute);
+    flex-shrink: 0;
 }
 
-/* ── Threaded audit trail ─────────────────────────────────────────── */
+.label[role="status"] > *,
+.review-cases-table .label > *,
+.review-activity-thread .label > *,
+.review-pending-card .label > *,
+.label.review-label-pill > * {
+    /* Keep the icon + label spacing tight */
+    margin: 0;
+}
+
+.label[role="status"],
+.review-cases-table .label,
+.review-activity-thread .label,
+.review-pending-card .label,
+.label.review-label-pill {
+    padding-right: 8px;
+}
+
+.label.review-label-pill i {
+    margin: 2px 5px 2px 6px;
+}
+.label.review-label-pill {
+    padding-right: 8px;
+}
+
+/* Tone variants — apply alongside the base pill class */
+.label-success,
+.label.label-success {
+    background: var(--rv-moss-soft);
+    color: var(--rv-moss-deep);
+}
+.label-success::before,
+.label.label-success::before {
+    background: var(--rv-moss);
+}
+.label-danger,
+.label.label-danger {
+    background: rgba(184, 39, 12, 0.10);
+    color: var(--rv-fail);
+}
+.label-danger::before,
+.label.label-danger::before {
+    background: var(--rv-fail);
+}
+.label-warning,
+.label.label-warning {
+    background: rgba(160, 106, 0, 0.10);
+    color: var(--rv-skip);
+}
+.label-warning::before,
+.label.label-warning::before {
+    background: var(--rv-skip);
+}
+.label-info,
+.label.label-info {
+    background: rgba(31, 85, 130, 0.08);
+    color: var(--rv-info);
+}
+.label-info::before,
+.label.label-info::before {
+    background: var(--rv-info);
+}
+.label-primary,
+.label.label-primary {
+    background: var(--rv-moss-soft);
+    color: var(--rv-moss-deep);
+}
+.label-primary::before,
+.label.label-primary::before {
+    background: var(--rv-moss-deep);
+}
+
+/* ─── Threaded audit trail ────────────────────────────────────── */
 
 .review-activity-feed-wrapper {
     display: flex;
     flex-direction: column;
-    gap: 12px;
+    gap: 14px;
 }
 
 .review-activity-toolbar {
     display: flex;
     align-items: center;
-    gap: 8px;
+    gap: 10px;
     padding: 4px 0;
+    border-bottom: 1px solid var(--rv-rule);
+    padding-bottom: 10px;
 }
 
 .review-activity-count {
     margin-left: auto;
-    font-size: 12px;
+    font-family: var(--rv-font-mono);
+    font-size: 11px;
+    color: var(--rv-ink-mute);
+    font-variant-numeric: tabular-nums;
 }
 
 .review-activity-show-older {
-    padding: 6px 14px 2px;
-    border-bottom: 1px dashed #ededed;
+    padding: 8px 14px 4px;
+    border-bottom: 1px dashed var(--rv-rule);
 }
 
 .review-activity-show-older .btn-link {
     padding: 0;
-    font-size: 12px;
-    color: #72767b;
+    font-family: var(--rv-font-mono);
+    font-size: 11px;
+    color: var(--rv-ink-mute);
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
 }
 
 .review-activity-show-older .btn-link:hover {
-    color: #39a5dc;
+    color: var(--rv-moss-deep);
     text-decoration: none;
 }
 
 .review-activity-older {
-    background: rgba(0, 0, 0, 0.02);
-    border-bottom: 1px solid #ededed;
+    background: var(--rv-paper-sunken);
+    border-bottom: 1px solid var(--rv-rule);
 }
 
-.review-activity-pagination {
-    margin: 0;
-}
-
+.review-activity-pagination,
 .review-activity-pagination .pagination {
     margin: 0;
 }
 
-
 .review-activity-threads {
     display: flex;
     flex-direction: column;
-    gap: 16px;
+    gap: 14px;
 }
 
 .review-activity-thread {
-    border: 1px solid #ededed;
-    border-left: 4px solid #bbbbbb;
-    border-radius: 4px;
-    background: #fafafa;
+    background: var(--rv-paper-raised);
+    border: 1px solid var(--rv-rule);
+    border-left: 3px solid var(--rv-ink-mute);
+    border-radius: var(--rv-radius-lg);
     overflow: hidden;
+    transition: border-color 160ms var(--rv-ease);
 }
 
-.review-activity-thread-request { border-left-color: #39a5dc; }
-.review-activity-thread-item    { border-left-color: #ec7a08; }
-.review-activity-thread-vote    { border-left-color: #3f9c35; }
+.review-activity-thread-request { border-left-color: var(--rv-info); }
+.review-activity-thread-item    { border-left-color: var(--rv-skip); }
+.review-activity-thread-vote    { border-left-color: var(--rv-moss); }
 
 .review-activity-thread-header {
     display: flex;
     align-items: center;
-    gap: 8px;
-    padding: 10px 12px;
-    background: #fff;
-    border-bottom: 1px solid #ededed;
-    font-weight: 600;
+    gap: 10px;
+    padding: 10px 14px;
+    background: var(--rv-paper-sunken);
+    border-bottom: 1px solid var(--rv-rule);
+    font-family: var(--rv-font-sans);
+    font-weight: 500;
+    font-size: 13px;
+    color: var(--rv-ink);
     cursor: pointer;
     user-select: none;
-    transition: background 0.15s ease;
+    transition: background 140ms var(--rv-ease);
 }
 
 .review-activity-thread-header:hover,
 .review-activity-thread-header:focus {
-    background: #f5f5f5;
+    background: var(--rv-moss-soft);
     outline: none;
 }
 
-.review-activity-thread-header:focus {
-    box-shadow: inset 0 0 0 2px #39a5dc;
+.review-activity-thread-header:focus-visible {
+    box-shadow: inset 0 0 0 2px var(--rv-moss);
 }
 
 .review-activity-chevron {
     font-size: 11px;
-    color: #72767b;
-    transition: transform 0.2s ease;
+    color: var(--rv-ink-mute);
+    transition: transform 200ms var(--rv-ease);
 }
 
 .review-activity-chevron-rotated {
@@ -272,25 +702,29 @@
 
 .review-activity-thread-title {
     flex: 1;
-    color: #292e34;
+    color: var(--rv-ink);
 }
 
 .review-activity-thread-meta {
-    font-size: 11px;
+    font-family: var(--rv-font-mono);
+    font-size: 10px;
     font-weight: 400;
-    color: #9c9c9c;
+    color: var(--rv-ink-mute);
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
 }
 
 .review-activity-thread-entries {
     margin: 0;
     padding: 0;
+    list-style: none;
 }
 
 .review-activity-entry {
     display: flex;
     align-items: flex-start;
-    padding: 10px 14px 10px 30px;
-    border-bottom: 1px dashed #ededed;
+    padding: 12px 16px 12px 32px;
+    border-bottom: 1px dashed var(--rv-rule);
     position: relative;
 }
 
@@ -298,28 +732,30 @@
     content: "";
     position: absolute;
     left: 14px;
-    top: 20px;
+    top: 18px;
     width: 6px;
     height: 6px;
-    background: #bbb;
+    background: var(--rv-ink-mute);
     border-radius: 50%;
 }
 
+/* Decision-coded dots — `+` approves, `~` neutral, `-` rejects */
 .review-activity-entry\+::before,
-.review-activity-entry.review-activity-\+::before { background: #3f9c35; }
+.review-activity-entry.review-activity-\+::before { background: var(--rv-moss); }
 .review-activity-entry\~::before,
-.review-activity-entry.review-activity-\~::before { background: #ec7a08; }
+.review-activity-entry.review-activity-\~::before { background: var(--rv-skip); }
 .review-activity-entry\-::before,
-.review-activity-entry.review-activity-\-::before { background: #cc0000; }
+.review-activity-entry.review-activity-\-::before { background: var(--rv-fail); }
 
 .review-activity-entry:last-child {
     border-bottom: none;
 }
 
 .review-activity-meta {
-    flex: 0 0 170px;
+    flex: 0 0 180px;
+    font-family: var(--rv-font-mono);
     font-size: 11px;
-    color: #72767b;
+    color: var(--rv-ink-mute);
 }
 
 .review-activity-timestamp {
@@ -329,62 +765,77 @@
 
 .review-activity-user {
     display: block;
-    font-weight: 600;
-    color: #292e34;
+    font-family: var(--rv-font-sans);
+    font-weight: 500;
+    color: var(--rv-ink);
+    font-size: 13px;
+    margin-top: 2px;
 }
 
 .review-activity-body {
     flex: 1;
     padding-left: 12px;
+    font-family: var(--rv-font-sans);
+    font-size: 13px;
+    color: var(--rv-ink-soft);
+    line-height: 1.5;
 }
 
 .review-activity-summary {
     margin-bottom: 4px;
+    color: var(--rv-ink);
 }
 
 .review-activity-changes {
     list-style: none;
-    margin: 6px 0 0;
+    margin: 8px 0 0;
     padding: 0;
-    font-size: 12px;
 }
 
 .review-activity-change {
-    padding: 4px 8px;
+    padding: 5px 10px;
     margin-top: 4px;
-    background: #fff;
-    border-left: 2px solid #d1d1d1;
-    font-family: var(--kiwi-monospace, 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace);
+    background: var(--rv-paper-sunken);
+    border-left: 2px solid var(--rv-rule-strong);
+    border-radius: 0 var(--rv-radius) var(--rv-radius) 0;
+    font-family: var(--rv-font-mono);
+    font-size: 11px;
 }
 
 .review-activity-field {
-    color: #72767b;
-    font-weight: 600;
+    color: var(--rv-ink-mute);
+    font-family: var(--rv-font-mono);
+    font-weight: 500;
     text-transform: uppercase;
     font-size: 10px;
-    letter-spacing: 0.04em;
-    margin-right: 4px;
+    letter-spacing: 0.08em;
+    margin-right: 6px;
 }
 
 .review-activity-before {
-    color: #c00;
+    color: var(--rv-fail);
     text-decoration: line-through;
-    text-decoration-color: rgba(204, 0, 0, 0.4);
+    text-decoration-color: rgba(184, 39, 12, 0.4);
 }
 
 .review-activity-after {
-    color: #3f9c35;
-    font-weight: 600;
+    color: var(--rv-moss-deep);
+    font-weight: 500;
 }
 
-/* ── Error modal ──────────────────────────────────────────────────── */
+/* ─── Error / confirm modals ─────────────────────────────────── */
 
 #review-error-modal .modal-header {
-    background: #c00;
-    color: #fff;
+    background: var(--rv-fail);
+    color: var(--rv-paper-raised);
     border-bottom: none;
-    border-top-left-radius: 4px;
-    border-top-right-radius: 4px;
+    border-radius: var(--rv-radius-lg) var(--rv-radius-lg) 0 0;
+}
+
+#review-error-modal .modal-title {
+    font-family: var(--rv-font-sans);
+    font-weight: 600;
+    font-size: 16px;
 }
 
 #review-error-modal .modal-title .pficon,
@@ -392,45 +843,99 @@
     margin-right: 6px;
 }
 
-#review-error-modal .modal-title .close {
-    color: #fff;
+#review-error-modal .modal-header .close {
+    color: var(--rv-paper-raised);
     opacity: 0.85;
     text-shadow: none;
 }
 
 #review-error-modal .review-error-body {
+    font-family: var(--rv-font-sans);
     font-size: 14px;
-    margin-bottom: 8px;
+    margin-bottom: 10px;
+    color: var(--rv-ink);
 }
 
 #review-error-modal .review-error-hint {
+    font-family: var(--rv-font-sans);
     font-size: 12px;
-    padding-top: 8px;
-    border-top: 1px solid #ededed;
+    padding-top: 10px;
+    border-top: 1px solid var(--rv-rule);
     margin-bottom: 0;
+    color: var(--rv-ink-soft);
 }
 
 #review-error-modal .review-error-hint::before {
     content: "💡 ";
-    margin-right: 2px;
+    margin-right: 4px;
 }
 
 #review-confirm-modal .modal-header {
-    background: #ec7a08;
-    color: #fff;
+    background: var(--rv-skip);
+    color: var(--rv-paper-raised);
+    border-bottom: none;
+    border-radius: var(--rv-radius-lg) var(--rv-radius-lg) 0 0;
 }
 
-/* Pill-style badges for state and decision — rounded ends, a bit of
-   vertical padding so the icon lines up with the label text. */
-.label.review-label-pill {
-    display: inline-block;
-    border-radius: 10em;
-    padding: 3px 10px;
+#review-confirm-modal .modal-title {
+    font-family: var(--rv-font-sans);
     font-weight: 600;
-    letter-spacing: 0.02em;
-    line-height: 1.4;
+    font-size: 16px;
 }
 
-.label.review-label-pill i {
-    margin-right: 3px;
+/* ─── Breadcrumbs (override Bootstrap default backgrounds) ───── */
+
+.container-cards-pf .breadcrumb {
+    background: transparent;
+    padding: 0 0 12px;
+    margin-bottom: 16px;
+    border-bottom: 1px solid var(--rv-rule);
+    border-radius: 0;
+    font-family: var(--rv-font-sans);
+    font-size: 12px;
+    color: var(--rv-ink-mute);
+}
+.container-cards-pf .breadcrumb a {
+    color: var(--rv-ink);
+    text-decoration: none;
+    border-bottom: 1px dotted var(--rv-rule-strong);
+}
+.container-cards-pf .breadcrumb a:hover {
+    color: var(--rv-moss-deep);
+    border-bottom-color: var(--rv-moss);
+}
+
+/* ─── Pagination ─────────────────────────────────────────────── */
+
+.container-cards-pf .pagination > li > a,
+.container-cards-pf .pagination > li > span {
+    background: var(--rv-paper-raised);
+    border: 1px solid var(--rv-rule-strong);
+    color: var(--rv-ink);
+    font-family: var(--rv-font-sans);
+    font-size: 12px;
+    padding: 5px 11px;
+    font-variant-numeric: tabular-nums;
+}
+.container-cards-pf .pagination > li > a:hover {
+    background: var(--rv-moss-soft);
+    border-color: var(--rv-moss);
+    color: var(--rv-moss-deep);
+}
+.container-cards-pf .pagination > .active > a,
+.container-cards-pf .pagination > .active > span {
+    background: var(--rv-moss-deep);
+    border-color: var(--rv-moss-deep);
+    color: var(--rv-paper-raised);
+    font-weight: 500;
+}
+
+/* ─── Motion guard ───────────────────────────────────────────── */
+
+@media (prefers-reduced-motion: reduce) {
+    .container-cards-pf *,
+    .review-page * {
+        animation: none !important;
+        transition: none !important;
+    }
 }
